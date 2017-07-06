@@ -19,21 +19,28 @@
 #include "ble/BLE.h"
 #include "ble/Gap.h"
 #include "ble/services/UARTService.h"
+#include "MAX17201.hpp"
+#include "bno055.hpp"
 
 #define NEED_CONSOLE_OUTPUT 1 /* Set this if you need debug messages on the console;
                                * it will have an impact on code-size and power consumption. */
 
 #if NEED_CONSOLE_OUTPUT
-#define DEBUG(STR) { if (uartServicePtr) uartServicePtr->write(STR, strlen(STR)); printf("%d\n", strlen(STR)); }
+#define DEBUG1(STR) { if (uartServicePtr) uartServicePtr->write(STR, strlen(STR)); printf("%d\n", strlen(STR)); }
+#define DEBUG2(STR, SIZE) { if (uartServicePtr) uartServicePtr->write(STR, SIZE); printf("%d\n", SIZE); }
 #else
 #define DEBUG(...) /* nothing */
 #endif /* #if NEED_CONSOLE_OUTPUT */
 
 DigitalOut led1(LED1, 1);
+I2C i2c(I2C_SDA, I2C_SCL);
 
-const static char     DEVICE_NAME[] = "BLE UART";
+BNO055 bno(&i2c);
+MAX17201 gauge(&i2c);
 
-static uint16_t hrmCounter = 1000; // init HRM to 100bps
+const static char     DEVICE_NAME[] = "HAND NODE";
+
+static bno055_raw_quaternion_t quat;
 static UARTService *uartServicePtr;
 
 static EventQueue eventQueue(
@@ -52,20 +59,22 @@ void connectionCallback (const Gap::ConnectionCallbackParams_t *params)
 
 void updateSensorValue()
 {
-	char buffer[20];
-
     // Do blocking calls or whatever is necessary for sensor polling.
-    // In our case, we simply update the HRM measurement.
-    hrmCounter++;
+    // In our case, we simply update the quaternion measurement.
+	uint8_t buffer[8];
+	bno.read_quaternion(&quat);
 
-    //  100 <= HRM bps <=175
-    if (hrmCounter == 2000) {
-        hrmCounter = 1000;
-    }
+    //snprintf(buffer, 21, "%.3f,%.3f,%.3f,%.3f\n", quat.w, quat.x, quat.y, quat.z);
+	buffer[0] = (quat.w >> 8); buffer[1] = (quat.w & 0xFF);
+	buffer[2] = (quat.x >> 8); buffer[3] = (quat.x & 0XFF);
+	buffer[4] = (quat.y >> 8); buffer[5] = (quat.y & 0XFF);
+	buffer[6] = (quat.z >> 8); buffer[7] = (quat.z & 0XFF);
 
-    sniprintf(buffer, 21, "Q: 175,248,333,%d\n", hrmCounter);
-    DEBUG(buffer);
-    printf("Quaternion: %s\n\r", buffer);
+    DEBUG2(buffer, 8);
+    char end[1];
+    snprintf(end, 2, "\n");
+    DEBUG1(end);
+    printf("Quaternion: %d, %d, %d, %d\n\r", quat.w, quat.x, quat.y, quat.z);
 }
 
 void periodicCallback(void)
@@ -121,17 +130,39 @@ void scheduleBleEventsProcessing(BLE::OnEventsToProcessCallbackContext* context)
     eventQueue.call(Callback<void()>(&ble, &BLE::processEvents));
 }
 
+void print_gauge_info()
+{
+    printf("Capacity : %.3f mAh\n", gauge.reported_capacity());
+    printf("SOC: %.3f percent\n", gauge.state_of_charge());
+    printf("Voltage : %.3f Volts\n", gauge.cell_voltage()/1000);
+    printf("Current : %.3f mA\n", gauge.average_current());
+    printf("Time To Empty: %.2f hours\n", gauge.time_to_empty()/3600);
+    printf("Temperature: %f °C\n\n", gauge.temperature());
+}
+
 int main()
 {
-    eventQueue.call_every(40, periodicCallback);
+    printf("Start up...\n\r");
+	if (bno.initialize()) {
+		printf("BNO initialized !\n");
+	}
+	else {
+		printf("Fail to initialize BNO055 ! \n");
+	}
 
+	if (gauge.configure(1, 800, 3.3, false, false)) {
+		printf("Gauge initialized ! \n");
+	}
+	else {
+		printf("Fail to initialized MAX17201 gauge ! \n");
+	}
     BLE &ble = BLE::Instance();
     ble.onEventsToProcess(scheduleBleEventsProcessing);
     ble.init(bleInitComplete);
     ble.gap().onConnection(connectionCallback);
 
-    printf("Start up...\n\r");
-
+    eventQueue.call_every(40, periodicCallback);
+    eventQueue.call_every(2000, print_gauge_info);
     eventQueue.dispatch_forever();
 
     return 0;
