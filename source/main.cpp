@@ -33,6 +33,8 @@
 #define DEBUG(...) /* nothing */
 #endif /* #if NEED_CONSOLE_OUTPUT */
 
+InterruptIn user_button(USER_BUTTON);
+
 DigitalOut led1(LED1, 1);
 I2C i2c(I2C_SDA, I2C_SCL);
 Serial pc(SERIAL_TX, SERIAL_RX);
@@ -40,9 +42,11 @@ Serial pc(SERIAL_TX, SERIAL_RX);
 BNO055 bno(&i2c);
 MAX17201 gauge(&i2c);
 
-Gap::ConnectionParams_t gap_params;
+static Gap::Handle_t gap_h;
+static Gap::ConnectionParams_t gap_params;
 
-const static char     DEVICE_NAME[] = "HAND NODE";
+const static char     DEVICE_NAME[] = "FOREARM NODE";
+
 static const uint16_t uuid16_list[] = {GattService::UUID_BATTERY_SERVICE};
 
 static bno055_raw_quaternion_t quat;
@@ -54,22 +58,13 @@ static uint16_t msg_cnt = 0;
 static EventQueue eventQueue(
     /* event count */ 16 * /* event size */ 32
 );
-
-void disconnectionCallback(const Gap::DisconnectionCallbackParams_t *params)
-{
-    BLE::Instance().gap().startAdvertising(); // restart advertising
-}
-
-void connectionCallback (const Gap::ConnectionCallbackParams_t *params)
-{
-	led1 = 1;
-}
+static int loop_id;
 
 void updateSensorValue()
 {
     // Do blocking calls or whatever is necessary for sensor polling.
     // In our case, we simply update the quaternion measurement.
-	uint8_t buffer[11];
+	static uint8_t buffer[11];
 	bno.read_quaternion(&quat);
 	msg_cnt++;
 
@@ -86,6 +81,18 @@ void updateSensorValue()
     //printf("Quaternion: %d, %d, %d, %d\n\r", quat.w, quat.x, quat.y, quat.z);
 }
 
+void advertise()
+{
+	BLE::Instance().gap().startAdvertising();
+}
+
+void stopScan()
+{
+	BLE::Instance().gap().stopScan();
+	wait_ms(200);
+    eventQueue.call(advertise);
+}
+
 void periodicCallback(void)
 {
     if (BLE::Instance().getGapState().connected) {
@@ -95,6 +102,87 @@ void periodicCallback(void)
 	    led1 = !led1; /* Do blinky on LED1 while we're waiting for BLE events */
 	    Thread::wait(200);
 	}
+}
+
+void scanCallback(const Gap::AdvertisementCallbackParams_t * params)
+{
+	if (params->peerAddr[0] == 0xAB && params->peerAddr[1] == 0xC9) {
+		if (params->advertisingDataLen == 4) {
+			uint32_t *dataptr = (uint32_t *) params->advertisingData;
+			if (*dataptr == 0x04030201) {
+				printf("Sync packet received !\n");
+				led1 = 1;
+				eventQueue.call(stopScan);
+			    loop_id = eventQueue.call_every(20, periodicCallback); // 50 Hz
+			}
+		}
+		//printf("addr received: [%02x %02x %02x %02x %02x %02x] RSSI : %d dB Length: %d\n", params->peerAddr[5], params->peerAddr[4], params->peerAddr[3],
+		//		params->peerAddr[2], params->peerAddr[1], params->peerAddr[0], params->rssi, params->advertisingDataLen);
+	}
+}
+
+void waitSyncPacket()
+{
+	if (BLE::Instance().getGapState().connected) {
+		BLE::Instance().gap().disconnect(Gap::DisconnectionReason_t::LOCAL_HOST_TERMINATED_CONNECTION);
+			wait_ms(500);
+	}
+
+	BLE::Instance().gap().stopAdvertising();
+
+	if (BLE::Instance().gap().startScan(scanCallback) == BLE_ERROR_NONE) {
+		eventQueue.cancel(loop_id);
+		led1 = 0;
+		printf("Scan Started\n");
+	}
+	else {
+		printf("Error while trying to start scan\n");
+	}
+}
+
+void uartDataWrittenCallback(const GattWriteCallbackParams * params)
+{
+	if (params->handle == uartServicePtr->getTXCharacteristicHandle()) {
+		//char string[params->len];
+
+		printf("TX message: %.*s\n", params->len, params->data);
+		//printf("The string is: %.*s\n", params->len, string);
+		if (strcmp((const char*) params->data, "SCAN") == 0) {
+			printf("START scan !\n");
+			waitSyncPacket();
+		}
+	}
+}
+
+void disconnectionCallback(const Gap::DisconnectionCallbackParams_t *params)
+{
+    BLE::Instance().gap().startAdvertising(); // restart advertising
+}
+
+void updateConnectionParams()
+{
+	BLE &ble = BLE::Instance();
+	if (ble.getGapState().connected) {
+	    gap_params.connectionSupervisionTimeout = 3200;
+	    gap_params.minConnectionInterval = 6;
+	    gap_params.maxConnectionInterval = 10;
+	    gap_params.slaveLatency = 0;
+
+	    if (ble.gap().updateConnectionParams(gap_h, &gap_params) == BLE_ERROR_NONE) {
+	    	printf("Request a connection params update!\n");
+	    }
+	}
+}
+
+void connectionCallback (const Gap::ConnectionCallbackParams_t *params)
+{
+	gap_h = params->handle;
+	led1 = 1;
+	printf("Connected !\n");
+	printf("min interval: %d\n", params->connectionParams->minConnectionInterval);
+	printf("max interval: %d\n", params->connectionParams->maxConnectionInterval);
+
+	updateConnectionParams();
 }
 
 void onBleInitError(BLE &ble, ble_error_t error)
@@ -117,21 +205,32 @@ void bleInitComplete(BLE::InitializationCompleteCallbackContext *params)
     if (ble.getInstanceID() != BLE::DEFAULT_INSTANCE) {
         return;
     }
+    ble.gap().setDeviceName((uint8_t*) DEVICE_NAME);
+
+    gap_params.connectionSupervisionTimeout = 3200;
+    gap_params.minConnectionInterval = 6;
+    gap_params.maxConnectionInterval = 16;
+    gap_params.slaveLatency = 0;
+
+    int8_t ret = ble.gap().setPreferredConnectionParams(&gap_params);
 
     ble.gap().onDisconnection(disconnectionCallback);
 
     /* Setup primary service. */
     uartServicePtr = new UARTService(ble);
-    battery_service = new BatteryService(ble, battery_level);
+	battery_service = new BatteryService(ble, battery_level);
+
+    ble.gattServer().onDataWritten(uartDataWrittenCallback);
 
     /* Setup advertising. */
     ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::BREDR_NOT_SUPPORTED | GapAdvertisingData::LE_GENERAL_DISCOVERABLE);
     ble.gap().setAdvertisingType(GapAdvertisingParams::ADV_CONNECTABLE_UNDIRECTED);
+    ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::Appearance_t::GENERIC_RUNNING_WALKING_SENSOR);
     ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::COMPLETE_LOCAL_NAME, (uint8_t *)DEVICE_NAME, sizeof(DEVICE_NAME));
     ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::COMPLETE_LIST_16BIT_SERVICE_IDS, (uint8_t *) uuid16_list, sizeof(uuid16_list));
     ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::COMPLETE_LIST_128BIT_SERVICE_IDS, (uint8_t *)UARTServiceUUID_reversed, sizeof(UARTServiceUUID_reversed));
 
-    ble.gap().setAdvertisingInterval(100); /* 500ms */
+    ble.gap().setAdvertisingInterval(500); /* 500ms */
     ble.gap().startAdvertising();
 }
 
@@ -158,13 +257,20 @@ void update_battery_info()
     }
 }
 
+void button_handler()
+{
+	eventQueue.call(waitSyncPacket);
+}
+
 int main()
 {
 	pc.baud(115200);
     printf("Start up...\n\r");
     printf("SystemCoreClock : %d\n", SystemCoreClock);
 
-	if (bno.initialize()) {
+    user_button.rise(button_handler);
+
+	if (bno.initialize(BNO055::OperationMode::OperationMode_NDOF, true)) {
 		printf("BNO initialized !\n");
 	}
 	else {
@@ -188,7 +294,7 @@ int main()
     ble.init(bleInitComplete);
     ble.gap().onConnection(connectionCallback);
 
-    eventQueue.call_every(20, periodicCallback); // 50 Hz
+    loop_id = eventQueue.call_every(20, periodicCallback); // 50 Hz
     //eventQueue.call_every(2000, print_gauge_info);
     eventQueue.call_every(5000, update_battery_info);
     eventQueue.dispatch_forever();
