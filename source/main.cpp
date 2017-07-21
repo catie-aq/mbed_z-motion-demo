@@ -27,8 +27,8 @@
                                * it will have an impact on code-size and power consumption. */
 
 #if NEED_CONSOLE_OUTPUT
-#define DEBUG1(STR) { if (uartServicePtr) uartServicePtr->write(STR, strlen(STR));/* printf("%d\n", strlen(STR));*/ }
-#define DEBUG2(STR, SIZE) { if (uartServicePtr) uartServicePtr->write(STR, SIZE); /*printf("%d\n", SIZE);*/ }
+#define BLE_PRINT(STR) { if (uartServicePtr) uartServicePtr->write(STR, strlen(STR));/* printf("%d\n", strlen(STR));*/ }
+#define BLE_PRINT2(STR, SIZE) { if (uartServicePtr) uartServicePtr->write(STR, SIZE); /*printf("%d\n", SIZE);*/ }
 #else
 #define DEBUG(...) /* nothing */
 #endif /* #if NEED_CONSOLE_OUTPUT */
@@ -36,8 +36,10 @@
 InterruptIn user_button(USER_BUTTON);
 
 DigitalOut led1(LED1, 1);
+DigitalOut sync(DAC_OUT1);
 I2C i2c(I2C_SDA, I2C_SCL);
 Serial pc(SERIAL_TX, SERIAL_RX);
+
 
 BNO055 bno(&i2c);
 MAX17201 gauge(&i2c);
@@ -45,7 +47,7 @@ MAX17201 gauge(&i2c);
 static Gap::Handle_t gap_h;
 static Gap::ConnectionParams_t gap_params;
 
-const static char     DEVICE_NAME[] = "FOREARM NODE";
+const static char     DEVICE_NAME[] = "HAND NODE";
 
 static const uint16_t uuid16_list[] = {GattService::UUID_BATTERY_SERVICE};
 
@@ -54,54 +56,51 @@ static UARTService *uartServicePtr;
 static BatteryService * battery_service;
 static uint8_t battery_level = 50;
 static uint16_t msg_cnt = 0;
+static uint8_t quaternion_buffer[11];
 
-static EventQueue eventQueue(
-    /* event count */ 16 * /* event size */ 32
-);
+
+static EventQueue bleQueue(/* event count */ 16 * /* event size */ 32);
+static EventQueue dataQueue(/* event count */ 16 * /* event size */ 32);
 static int loop_id;
+static int blink_id;
+Thread ble_thread;
+Thread data_thread;
+
+void bleInitComplete(BLE::InitializationCompleteCallbackContext *params);
 
 void updateSensorValue()
 {
+    BLE_PRINT2(quaternion_buffer, sizeof(quaternion_buffer));
+}
+
+void getSensorValue()
+{
     // Do blocking calls or whatever is necessary for sensor polling.
     // In our case, we simply update the quaternion measurement.
-	static uint8_t buffer[11];
 	bno.read_quaternion(&quat);
 	msg_cnt++;
 
     //snprintf(buffer, 21, "%.3f,%.3f,%.3f,%.3f\n", quat.w, quat.x, quat.y, quat.z);
-	buffer[0] = (msg_cnt >> 8); buffer[1] = (msg_cnt & 0xFF);
-	buffer[2] = (quat.w >> 8); buffer[3] = (quat.w & 0xFF);
-	buffer[4] = (quat.x >> 8); buffer[5] = (quat.x & 0XFF);
-	buffer[6] = (quat.y >> 8); buffer[7] = (quat.y & 0XFF);
-	buffer[8] = (quat.z >> 8); buffer[9] = (quat.z & 0XFF);
-	buffer[10] = 0x0A; // "\n"
+	quaternion_buffer[0] = (msg_cnt >> 8); quaternion_buffer[1] = (msg_cnt & 0xFF);
+	quaternion_buffer[2] = (quat.w >> 8); quaternion_buffer[3] = (quat.w & 0xFF);
+	quaternion_buffer[4] = (quat.x >> 8); quaternion_buffer[5] = (quat.x & 0XFF);
+	quaternion_buffer[6] = (quat.y >> 8); quaternion_buffer[7] = (quat.y & 0XFF);
+	quaternion_buffer[8] = (quat.z >> 8); quaternion_buffer[9] = (quat.z & 0XFF);
+	quaternion_buffer[10] = 0x0A; // "\n"
 
-    DEBUG2(buffer, sizeof(buffer));
-    //DEBUG1("\n");
-    //printf("Quaternion: %d, %d, %d, %d\n\r", quat.w, quat.x, quat.y, quat.z);
+	bleQueue.call(updateSensorValue);
 }
 
-void advertise()
+void blink()
 {
-	BLE::Instance().gap().startAdvertising();
-}
-
-void stopScan()
-{
-	BLE::Instance().gap().stopScan();
-	wait_ms(200);
-    eventQueue.call(advertise);
+	led1 = !led1;
 }
 
 void periodicCallback(void)
 {
     if (BLE::Instance().getGapState().connected) {
-        eventQueue.call(updateSensorValue);
+        dataQueue.call(getSensorValue);
     }
-    else {
-	    led1 = !led1; /* Do blinky on LED1 while we're waiting for BLE events */
-	    Thread::wait(200);
-	}
 }
 
 void scanCallback(const Gap::AdvertisementCallbackParams_t * params)
@@ -110,10 +109,12 @@ void scanCallback(const Gap::AdvertisementCallbackParams_t * params)
 		if (params->advertisingDataLen == 4) {
 			uint32_t *dataptr = (uint32_t *) params->advertisingData;
 			if (*dataptr == 0x04030201) {
-				printf("Sync packet received !\n");
+				sync = 1;
 				led1 = 1;
-				eventQueue.call(stopScan);
-			    loop_id = eventQueue.call_every(20, periodicCallback); // 50 Hz
+				printf("Sync packet received !\n");
+				BLE::Instance().gap().stopScan();
+				BLE::Instance().gap().startAdvertising();
+			    blink_id = bleQueue.call_every(500, blink); // 50 Hz
 			}
 		}
 		//printf("addr received: [%02x %02x %02x %02x %02x %02x] RSSI : %d dB Length: %d\n", params->peerAddr[5], params->peerAddr[4], params->peerAddr[3],
@@ -127,11 +128,15 @@ void waitSyncPacket()
 		BLE::Instance().gap().disconnect(Gap::DisconnectionReason_t::LOCAL_HOST_TERMINATED_CONNECTION);
 			wait_ms(500);
 	}
+	else {
+		bleQueue.cancel(blink_id);
+	}
 
 	BLE::Instance().gap().stopAdvertising();
 
+	//BLE::Instance().gap().setScanParams(20, 20, 0); //20 ms scan interval and window
 	if (BLE::Instance().gap().startScan(scanCallback) == BLE_ERROR_NONE) {
-		eventQueue.cancel(loop_id);
+		dataQueue.cancel(loop_id);
 		led1 = 0;
 		printf("Scan Started\n");
 	}
@@ -156,14 +161,20 @@ void uartDataWrittenCallback(const GattWriteCallbackParams * params)
 
 void disconnectionCallback(const Gap::DisconnectionCallbackParams_t *params)
 {
-    BLE::Instance().gap().startAdvertising(); // restart advertising
+	printf("Disconnected!\n");
+	/* If local host terminated connection, we assume that it is to start a scan so we dont restart advertising  */
+	if (params->reason != Gap::DisconnectionReason_t::LOCAL_HOST_TERMINATED_CONNECTION) {
+		blink_id = bleQueue.call_every(200, blink);
+	    dataQueue.cancel(loop_id);
+	    BLE::Instance().gap().startAdvertising(); // restart advertising
+	}
 }
 
 void updateConnectionParams()
 {
 	BLE &ble = BLE::Instance();
 	if (ble.getGapState().connected) {
-	    gap_params.connectionSupervisionTimeout = 3200;
+	    gap_params.connectionSupervisionTimeout = 500;
 	    gap_params.minConnectionInterval = 6;
 	    gap_params.maxConnectionInterval = 10;
 	    gap_params.slaveLatency = 0;
@@ -177,12 +188,14 @@ void updateConnectionParams()
 void connectionCallback (const Gap::ConnectionCallbackParams_t *params)
 {
 	gap_h = params->handle;
+	bleQueue.cancel(blink_id);
 	led1 = 1;
 	printf("Connected !\n");
 	printf("min interval: %d\n", params->connectionParams->minConnectionInterval);
 	printf("max interval: %d\n", params->connectionParams->maxConnectionInterval);
 
 	updateConnectionParams();
+    //loop_id = dataQueue.call_every(20, periodicCallback); // 50 Hz
 }
 
 void onBleInitError(BLE &ble, ble_error_t error)
@@ -190,6 +203,7 @@ void onBleInitError(BLE &ble, ble_error_t error)
     (void)ble;
     (void)error;
    /* Initialization error handling should go here */
+    printf("Error: %d\n", error);
 }
 
 void bleInitComplete(BLE::InitializationCompleteCallbackContext *params)
@@ -207,12 +221,12 @@ void bleInitComplete(BLE::InitializationCompleteCallbackContext *params)
     }
     ble.gap().setDeviceName((uint8_t*) DEVICE_NAME);
 
-    gap_params.connectionSupervisionTimeout = 3200;
+    gap_params.connectionSupervisionTimeout = 500;
     gap_params.minConnectionInterval = 6;
     gap_params.maxConnectionInterval = 16;
     gap_params.slaveLatency = 0;
 
-    int8_t ret = ble.gap().setPreferredConnectionParams(&gap_params);
+    ble.gap().setPreferredConnectionParams(&gap_params);
 
     ble.gap().onDisconnection(disconnectionCallback);
 
@@ -225,18 +239,18 @@ void bleInitComplete(BLE::InitializationCompleteCallbackContext *params)
     /* Setup advertising. */
     ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::BREDR_NOT_SUPPORTED | GapAdvertisingData::LE_GENERAL_DISCOVERABLE);
     ble.gap().setAdvertisingType(GapAdvertisingParams::ADV_CONNECTABLE_UNDIRECTED);
-    ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::Appearance_t::GENERIC_RUNNING_WALKING_SENSOR);
     ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::COMPLETE_LOCAL_NAME, (uint8_t *)DEVICE_NAME, sizeof(DEVICE_NAME));
     ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::COMPLETE_LIST_16BIT_SERVICE_IDS, (uint8_t *) uuid16_list, sizeof(uuid16_list));
     ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::COMPLETE_LIST_128BIT_SERVICE_IDS, (uint8_t *)UARTServiceUUID_reversed, sizeof(UARTServiceUUID_reversed));
 
     ble.gap().setAdvertisingInterval(500); /* 500ms */
     ble.gap().startAdvertising();
+    blink_id = bleQueue.call_every(200, blink);
 }
 
 void scheduleBleEventsProcessing(BLE::OnEventsToProcessCallbackContext* context) {
     BLE &ble = BLE::Instance();
-    eventQueue.call(Callback<void()>(&ble, &BLE::processEvents));
+    bleQueue.call(Callback<void()>(&ble, &BLE::processEvents));
 }
 
 void print_gauge_info()
@@ -259,7 +273,7 @@ void update_battery_info()
 
 void button_handler()
 {
-	eventQueue.call(waitSyncPacket);
+	bleQueue.call(waitSyncPacket);
 }
 
 int main()
@@ -267,6 +281,10 @@ int main()
 	pc.baud(115200);
     printf("Start up...\n\r");
     printf("SystemCoreClock : %d\n", SystemCoreClock);
+
+    sync = 0;
+    data_thread.set_priority(osPriorityRealtime1);
+    ble_thread.set_priority(osPriorityRealtime);
 
     user_button.rise(button_handler);
 
@@ -294,10 +312,9 @@ int main()
     ble.init(bleInitComplete);
     ble.gap().onConnection(connectionCallback);
 
-    loop_id = eventQueue.call_every(20, periodicCallback); // 50 Hz
-    //eventQueue.call_every(2000, print_gauge_info);
-    eventQueue.call_every(5000, update_battery_info);
-    eventQueue.dispatch_forever();
-
+    //bleQueue.call_every(2000, print_gauge_info);
+    bleQueue.call_every(5000, update_battery_info);
+    data_thread.start(callback(&dataQueue, &EventQueue::dispatch_forever));
+    ble_thread.start(callback(&bleQueue, &EventQueue::dispatch_forever));
     return 0;
 }
