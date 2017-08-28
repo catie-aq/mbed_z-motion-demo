@@ -96,7 +96,7 @@ void getSensorValue()
         /* Every 10 seconds, the mbed timer has accumulated a 1 ms drift (100ppm) */
         if (need_time_adjustment) {
             need_time_adjustment = false;
-            real_time_correction += timer.read_ms() - timestamp_offset;
+            real_time_correction += timer.read_ms();
             wait_ms(1);
             ticker.attach_us(periodicCallback, 20000);
             timer.reset();
@@ -131,6 +131,7 @@ void scanCallback(const Gap::AdvertisementCallbackParams_t * params)
         if (*dataptr == 0x04030201) {
             timestamp_offset = timer.read_ms();
             counter = 0;
+            real_time_correction = 0;
             ticker.attach_us(periodicCallback, 20000);
             sync = 1;
             led1 = 1;
