@@ -22,6 +22,12 @@
 #include "ble/services/BatteryService.h"
 #include "MAX17201.hpp"
 #include "bno055.hpp"
+#include "bme280.h"
+#include "bmg160.h"
+#include "bma280.h"
+#include "ak8963.h"
+
+using namespace sixtron;
 
 #define NEED_LOG 0 /* Set this if you need debug messages on the console;
                                * it will have an impact on code-size and power consumption. */
@@ -34,18 +40,30 @@
 #define LOG(...) /* nothing */
 #endif /* #if NEED_CONSOLE_OUTPUT */
 
+/* Peripherals definitions */
 InterruptIn user_button(USER_BUTTON);
 DigitalOut led1(LED1, 1);
-DigitalOut sync(CAN1_RX);
+DigitalOut sync(CAN1_RX, 0);
 //DigitalIn gaugeAlert(DIO4);
 I2C i2c(I2C_SDA, I2C_SCL);
 Serial pc(SERIAL_TX, SERIAL_RX);
 
+/* Time management objects */
 Timer timer;
 Ticker ticker;
+static int timestamp = 0, timestamp_offset = 0, real_time_correction = 0;
+static uint16_t counter = 0;
+static bool need_time_adjustment = false;
 
-BNO055 bno(&i2c);
-MAX17201 gauge(&i2c);
+/* sensors */
+static BNO055 bno(&i2c);
+static MAX17201 gauge(&i2c);
+
+/* unused sensors to be shutdown */
+static BMG160 bmg(&i2c);
+static BME280 bme(&i2c);
+static BMA280 bma(&i2c);
+static AK8963 ak8963(&i2c);
 
 static Gap::Handle_t gap_h;
 static Gap::ConnectionParams_t gap_params;
@@ -59,14 +77,14 @@ static UARTService *uartServicePtr;
 static BatteryService * battery_service;
 static uint8_t battery_level = 50;
 static uint8_t quaternion_buffer[15];
-static int timestamp = 0, timestamp_offset = 0, real_time_correction = 0;
-static uint16_t counter = 0;
-static bool need_time_adjustment = false;
+
 
 static EventQueue bleQueue; //(/* event count */ 16 * /* event size */ 32);
 static int blink_id;
 Thread ble_thread;
 Thread data_thread;
+static IWDG_HandleTypeDef   IwdgHandle;
+static uint32_t uwLsiFreq = 0;
 
 void periodicCallback(void)
 {
@@ -206,8 +224,8 @@ void updateConnectionParams()
     BLE &ble = BLE::Instance();
     if (ble.getGapState().connected) {
         gap_params.connectionSupervisionTimeout = 500;
-        gap_params.minConnectionInterval = 6;
-        gap_params.maxConnectionInterval = 6;
+        gap_params.minConnectionInterval = 8;
+        gap_params.maxConnectionInterval = 10;
         gap_params.slaveLatency = 0;
 
         LOG("Request a connection params update!\n");
@@ -226,7 +244,7 @@ void connectionCallback (const Gap::ConnectionCallbackParams_t *params)
     //printf("min interval: %d\n", params->connectionParams->minConnectionInterval);
     //printf("max interval: %d\n", params->connectionParams->maxConnectionInterval);
 
-    updateConnectionParams();
+    bleQueue.call(updateConnectionParams);
     // Start streaming if we are not synchronised. If we are, streaming is already started
     if (sync == 0) {
         ticker.attach_us(periodicCallback, 20000);
@@ -258,8 +276,8 @@ void bleInitComplete(BLE::InitializationCompleteCallbackContext *params)
     ble.gap().setDeviceName((uint8_t*) DEVICE_NAME);
 
     gap_params.connectionSupervisionTimeout = 500;
-    gap_params.minConnectionInterval = 6;
-    gap_params.maxConnectionInterval = 16;
+    gap_params.minConnectionInterval = 8;
+    gap_params.maxConnectionInterval = 10;
     gap_params.slaveLatency = 0;
 
     ble.gap().setPreferredConnectionParams(&gap_params);
@@ -312,15 +330,42 @@ void button_handler()
     bleQueue.call(print_gauge_info);
 }
 
+void watchdog_refresh()
+{
+	HAL_IWDG_Refresh(&IwdgHandle);
+}
+
 int main()
 {
+    pc.baud(115200);
+    i2c.frequency(400000);
     printf("Start up...\n\r");
     printf("SystemCoreClock : %d\n", SystemCoreClock);
     timer.start();
 
-    pc.baud(115200);
-    i2c.frequency(400000);
-    sync = 0;
+	/* Clear reset flags in any cases */
+	__HAL_RCC_CLEAR_RESET_FLAGS(); // clear reset flags that may be rised by watchdog
+
+	/*# Get the LSI frequency */
+	uwLsiFreq = LSI_VALUE;
+
+	/*# Configure & Start the IWDG peripheral #########################################*/
+	/* Set counter reload value to obtain 5 sec. IWDG TimeOut.
+	 IWDG counter clock Frequency = uwLsiFreq
+	 Set Prescaler to 32 (IWDG_PRESCALER_32)
+	 Timeout Period = (Reload Counter Value * 32) / uwLsiFreq
+	 So Set Reload Counter Value = (5 * uwLsiFreq) / 32 */
+	IwdgHandle.Instance = IWDG;
+	IwdgHandle.Init.Prescaler = IWDG_PRESCALER_128;
+	IwdgHandle.Init.Reload = (uwLsiFreq / 32 );
+	IwdgHandle.Init.Window = IWDG_WINDOW_DISABLE;
+
+	if(HAL_IWDG_Init(&IwdgHandle) != HAL_OK)
+	{
+	/* Initialization Error */
+		printf("Can't init Watchdog !\n");
+	}
+
     data_thread.set_priority(osPriorityRealtime7);
     //ble_thread.set_priority(osPriorityHigh);
 
@@ -329,7 +374,7 @@ int main()
 
     user_button.rise(button_handler);
 
-    if (bno.initialize(BNO055::OperationMode::OperationMode_NDOF, true)) {
+    if (bno.initialize(BNO055::OperationMode::OperationMode_NDOF_FMC_OFF, true)) {
         printf("BNO initialized !\n");
     }
     else {
@@ -343,6 +388,11 @@ int main()
         printf("Fail to initialized MAX17201 gauge ! \n");
     }
 
+    bme.set_power_mode(BME280::SensorMode::SLEEP);
+    bma.set_power_mode(BMA280::PowerMode::PowerMode_DEEP_SUSPEND);
+    bmg.set_power_mode(BMG160::PowerMode::DEEPSUSPEND);
+    ak8963.power_off();
+
     battery_level = static_cast<uint8_t>(gauge.state_of_charge());
     gauge.set_current_alerts(80, -40);
     gauge.enable_alerts();
@@ -353,6 +403,7 @@ int main()
     ble.gap().onConnection(connectionCallback);
 
     bleQueue.call_every(30000, update_battery_info);
+    bleQueue.call_every(2000, watchdog_refresh);
     data_thread.start(callback(getSensorValue));
     bleQueue.dispatch_forever();
     return 0;
