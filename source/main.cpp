@@ -29,8 +29,9 @@
 
 using namespace sixtron;
 
-#define NEED_LOG 0 /* Set this if you need debug messages on the console;
-                               * it will have an impact on code-size and power consumption. */
+#define NEED_LOG 0 /* Set this if you need debug messages on the console; */
+#define KOMBOS_FREQUENCY	50.0
+
 #define BLE_PRINT(STR) { if (uartServicePtr) uartServicePtr->write(STR, strlen(STR));/* printf("%d\n", strlen(STR));*/ }
 #define BLE_PRINT2(STR, SIZE) { if (uartServicePtr) uartServicePtr->write(STR, SIZE); /*printf("%d\n", SIZE);*/ }
 
@@ -54,6 +55,14 @@ Ticker ticker;
 static int timestamp = 0, timestamp_offset = 0, real_time_correction = 0;
 static uint16_t counter = 0;
 static bool need_time_adjustment = false;
+static EventQueue bleQueue; //(/* event count */ 16 * /* event size */ 32);
+static int blink_id;
+Thread ble_thread;
+Thread data_thread;
+static IWDG_HandleTypeDef   IwdgHandle;
+static uint32_t uwLsiFreq = 0;
+static uint16_t period_ms = static_cast<uint16_t>(1000/KOMBOS_FREQUENCY);
+static uint16_t ten_s_correction = static_cast<uint16_t>(10000/period_ms);
 
 /* sensors */
 static BNO055 bno(&i2c);
@@ -78,20 +87,14 @@ static BatteryService * battery_service;
 static uint8_t battery_level = 50;
 static uint8_t quaternion_buffer[15];
 
-
-static EventQueue bleQueue; //(/* event count */ 16 * /* event size */ 32);
-static int blink_id;
-Thread ble_thread;
-Thread data_thread;
-static IWDG_HandleTypeDef   IwdgHandle;
-static uint32_t uwLsiFreq = 0;
+void bleInitComplete(BLE::InitializationCompleteCallbackContext *params);
 
 void periodicCallback(void)
 {
     if (BLE::Instance().getGapState().connected) {
         counter++;
         /* Every 10 seconds, the mbed timer has accumulated a 1 ms drift (100ppm) */
-        if (counter > 499) {
+        if (counter > ten_s_correction) {
             counter = 0;
             need_time_adjustment = true;
         }
@@ -116,7 +119,7 @@ void getSensorValue()
             need_time_adjustment = false;
             real_time_correction += timer.read_ms();
             wait_ms(1);
-            ticker.attach_us(periodicCallback, 20000);
+            ticker.attach_us(periodicCallback, 1000*period_ms);
             timer.reset();
         }
         timestamp = timer.read_ms() + real_time_correction - timestamp_offset;
@@ -142,6 +145,12 @@ void blink()
     led1 = !led1;
 }
 
+void synchronisationCB()
+{
+    BLE::Instance().gap().startAdvertising();
+    blink_id = bleQueue.call_every(500, blink);
+}
+
 void scanCallback(const Gap::AdvertisementCallbackParams_t * params)
 {
     if (params->advertisingDataLen == 4) {
@@ -150,13 +159,16 @@ void scanCallback(const Gap::AdvertisementCallbackParams_t * params)
             timestamp_offset = timer.read_ms();
             counter = 0;
             real_time_correction = 0;
-            ticker.attach_us(periodicCallback, 20000);
+            ticker.attach_us(periodicCallback, 1000*period_ms);
             sync = 1;
             led1 = 1;
             LOG("Sync packet received !\n");
             BLE::Instance().gap().stopScan();
-            BLE::Instance().gap().startAdvertising();
-            blink_id = bleQueue.call_every(500, blink);
+            bleQueue.call_in(2500, synchronisationCB);
+            //BLE::Instance().gap().reset();
+            //BLE::Instance().init(bleInitComplete);
+            //BLE::Instance().gap().startAdvertising();
+            //blink_id = bleQueue.call_every(500, blink);
         }
     }
         //LOG("addr received: [%02x %02x %02x %02x %02x %02x] RSSI : %d dB Length: %d\n", params->peerAddr[5], params->peerAddr[4], params->peerAddr[3],
@@ -224,8 +236,8 @@ void updateConnectionParams()
     BLE &ble = BLE::Instance();
     if (ble.getGapState().connected) {
         gap_params.connectionSupervisionTimeout = 500;
-        gap_params.minConnectionInterval = 8;
-        gap_params.maxConnectionInterval = 10;
+        gap_params.minConnectionInterval = 16;//20;
+        gap_params.maxConnectionInterval = 18;//22;
         gap_params.slaveLatency = 0;
 
         LOG("Request a connection params update!\n");
@@ -247,7 +259,7 @@ void connectionCallback (const Gap::ConnectionCallbackParams_t *params)
     bleQueue.call(updateConnectionParams);
     // Start streaming if we are not synchronised. If we are, streaming is already started
     if (sync == 0) {
-        ticker.attach_us(periodicCallback, 20000);
+        ticker.attach_us(periodicCallback, 1000*period_ms);
     }
     //loop_id = dataQueue.call_every(20, periodicCallback); // 50 Hz
 }
@@ -276,8 +288,8 @@ void bleInitComplete(BLE::InitializationCompleteCallbackContext *params)
     ble.gap().setDeviceName((uint8_t*) DEVICE_NAME);
 
     gap_params.connectionSupervisionTimeout = 500;
-    gap_params.minConnectionInterval = 8;
-    gap_params.maxConnectionInterval = 10;
+    gap_params.minConnectionInterval = 16;
+    gap_params.maxConnectionInterval = 18;
     gap_params.slaveLatency = 0;
 
     ble.gap().setPreferredConnectionParams(&gap_params);
@@ -341,6 +353,8 @@ int main()
     i2c.frequency(400000);
     printf("Start up...\n\r");
     printf("SystemCoreClock : %d\n", SystemCoreClock);
+    printf("Period : %d\n", period_ms);
+    printf("10 s counter correction : %d\n", ten_s_correction);
     timer.start();
 
 	/* Clear reset flags in any cases */
