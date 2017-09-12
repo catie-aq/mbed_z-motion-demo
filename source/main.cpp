@@ -77,7 +77,7 @@ static AK8963 ak8963(&i2c);
 static Gap::Handle_t gap_h;
 static Gap::ConnectionParams_t gap_params;
 
-const static char     DEVICE_NAME[] = "NODE 2";
+const static char     DEVICE_NAME[] = "NODE 4";
 static const uint16_t uuid16_list[] = {GattService::UUID_BATTERY_SERVICE};
 
 static bno055_raw_quaternion_t quat;
@@ -86,8 +86,6 @@ static UARTService *uartServicePtr;
 static BatteryService * battery_service;
 static uint8_t battery_level = 50;
 static uint8_t quaternion_buffer[15];
-
-void bleInitComplete(BLE::InitializationCompleteCallbackContext *params);
 
 void periodicCallback(void)
 {
@@ -113,7 +111,7 @@ void getSensorValue()
     // In our case, we update the quaternion measurement.
     while (true) {
         Thread::signal_wait(0x1);
-        sync = !sync;
+        //sync = !sync;
         /* Every 10 seconds, the mbed timer has accumulated a 1 ms drift (100ppm) */
         if (need_time_adjustment) {
             need_time_adjustment = false;
@@ -126,7 +124,7 @@ void getSensorValue()
         bno.read_quaternion(&quat);
         bno.get_calibration_status(&system_calib, &gyro_calib, &accel_calib, &mag_calib);
 
-        quaternion_buffer[0] = 0x02; // Node ID
+        quaternion_buffer[0] = 0x04; // Node ID
         quaternion_buffer[1] = (timestamp >> 24) & 0xFF; quaternion_buffer[2] = (timestamp >> 16) & 0xFF; //timestamp
         quaternion_buffer[3] = (timestamp >> 8) & 0xFF; quaternion_buffer[4] = timestamp & 0xFF; // timestamp
         quaternion_buffer[5] = (system_calib << 6) | (gyro_calib << 4) | (accel_calib << 2) | mag_calib; //calib
@@ -145,7 +143,7 @@ void blink()
     led1 = !led1;
 }
 
-void synchronisationCB()
+void synchronisationCallBack()
 {
     BLE::Instance().gap().startAdvertising();
     blink_id = bleQueue.call_every(500, blink);
@@ -164,7 +162,7 @@ void scanCallback(const Gap::AdvertisementCallbackParams_t * params)
             led1 = 1;
             LOG("Sync packet received !\n");
             BLE::Instance().gap().stopScan();
-            bleQueue.call_in(2500, synchronisationCB);
+            bleQueue.call_in(2500, synchronisationCallBack);
             //BLE::Instance().gap().reset();
             //BLE::Instance().init(bleInitComplete);
             //BLE::Instance().gap().startAdvertising();
@@ -173,6 +171,20 @@ void scanCallback(const Gap::AdvertisementCallbackParams_t * params)
     }
         //LOG("addr received: [%02x %02x %02x %02x %02x %02x] RSSI : %d dB Length: %d\n", params->peerAddr[5], params->peerAddr[4], params->peerAddr[3],
         //        params->peerAddr[2], params->peerAddr[1], params->peerAddr[0], params->rssi, params->advertisingDataLen);
+}
+
+void startScan()
+{
+    BLE::Instance().gap().setScanParams(2000, 2000, 0); //20 ms scan interval and window
+    if (BLE::Instance().gap().startScan(scanCallback) == BLE_ERROR_NONE) {
+        //dataQueue.cancel(loop_id);
+        ticker.detach();
+        led1 = 0;
+        LOG("Scan Started\n");
+    }
+    else {
+        LOG("Error while trying to start scan\n");
+    }
 }
 
 void waitSyncPacket()
@@ -188,20 +200,6 @@ void waitSyncPacket()
         bleQueue.cancel(blink_id);
         BLE::Instance().gap().stopAdvertising();
     }*/
-}
-
-void startScan()
-{
-    BLE::Instance().gap().setScanParams(2000, 2000, 0); //20 ms scan interval and window
-    if (BLE::Instance().gap().startScan(scanCallback) == BLE_ERROR_NONE) {
-        //dataQueue.cancel(loop_id);
-        ticker.detach();
-        led1 = 0;
-        LOG("Scan Started\n");
-    }
-    else {
-        LOG("Error while trying to start scan\n");
-    }
 }
 
 void uartDataWrittenCallback(const GattWriteCallbackParams * params)
