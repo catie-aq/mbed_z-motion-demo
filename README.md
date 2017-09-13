@@ -7,7 +7,7 @@ The main file is in the `source` folder.
 
 * Install the compiler `arm-none-eabi-gcc`
 
-* Compile using `mbed-cli`. To install mbed-cli follow the instruction given here https://docs.mbed.com/docs/mbed-os-handbook/en/5.1/dev_tools/cli/#installing-mbed-cli
+* Compile using `mbed-cli`. To install mbed-cli follow the instruction given here https://docs.mbed.com/docs/mbed-os-handbook/en/latest/dev_tools/cli/#installing-mbed-cli
 
 ## Modify the node settings
 
