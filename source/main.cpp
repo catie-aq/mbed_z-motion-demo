@@ -31,6 +31,7 @@ using namespace sixtron;
 
 #define NEED_LOG 0 /* Set this if you need debug messages on the console; */
 #define KOMBOS_FREQUENCY	50.0
+#define NODE_ID			0x01
 
 #define BLE_PRINT(STR) { if (uartServicePtr) uartServicePtr->write(STR, strlen(STR));/* printf("%d\n", strlen(STR));*/ }
 #define BLE_PRINT2(STR, SIZE) { if (uartServicePtr) uartServicePtr->write(STR, SIZE); /*printf("%d\n", SIZE);*/ }
@@ -57,9 +58,8 @@ static uint16_t counter = 0;
 static bool need_time_adjustment = false;
 static EventQueue bleQueue; //(/* event count */ 16 * /* event size */ 32);
 static int blink_id;
-Thread ble_thread;
 Thread data_thread;
-static IWDG_HandleTypeDef   IwdgHandle;
+static IWDG_HandleTypeDef   IwdgHandle; // Watchdog
 static uint32_t uwLsiFreq = 0;
 static uint16_t period_ms = static_cast<uint16_t>(1000/KOMBOS_FREQUENCY);
 static uint16_t ten_s_correction = static_cast<uint16_t>(10000/period_ms);
@@ -77,7 +77,7 @@ static AK8963 ak8963(&i2c);
 static Gap::Handle_t gap_h;
 static Gap::ConnectionParams_t gap_params;
 
-const static char     DEVICE_NAME[] = "NODE 4";
+const static char     DEVICE_NAME[] = "NODE 1";
 static const uint16_t uuid16_list[] = {GattService::UUID_BATTERY_SERVICE};
 
 static bno055_raw_quaternion_t quat;
@@ -87,6 +87,10 @@ static BatteryService * battery_service;
 static uint8_t battery_level = 50;
 static uint8_t quaternion_buffer[15];
 
+/**
+ *  This function is called periodically according to
+ * the KOMBOS_FREQUENCY, and trigger the data acquisition
+ */
 void periodicCallback(void)
 {
     if (BLE::Instance().getGapState().connected) {
@@ -108,7 +112,7 @@ void updateSensorValue()
 void getSensorValue()
 {
     // Do blocking calls or whatever is necessary for sensor polling.
-    // In our case, we update the quaternion measurement.
+    // In our case, we update the inertial measurement.
     while (true) {
         Thread::signal_wait(0x1);
         //sync = !sync;
@@ -124,7 +128,7 @@ void getSensorValue()
         bno.read_quaternion(&quat);
         bno.get_calibration_status(&system_calib, &gyro_calib, &accel_calib, &mag_calib);
 
-        quaternion_buffer[0] = 0x04; // Node ID
+        quaternion_buffer[0] = NODE_ID; // Node ID
         quaternion_buffer[1] = (timestamp >> 24) & 0xFF; quaternion_buffer[2] = (timestamp >> 16) & 0xFF; //timestamp
         quaternion_buffer[3] = (timestamp >> 8) & 0xFF; quaternion_buffer[4] = timestamp & 0xFF; // timestamp
         quaternion_buffer[5] = (system_calib << 6) | (gyro_calib << 4) | (accel_calib << 2) | mag_calib; //calib
@@ -134,7 +138,7 @@ void getSensorValue()
         quaternion_buffer[12] = (quat.z >> 8); quaternion_buffer[13] = (quat.z & 0XFF); // Q3
         quaternion_buffer[14] = 0x0A; // "\n"
 
-        bleQueue.call(updateSensorValue);
+        bleQueue.call(updateSensorValue); // send the frame thtrough BLE
     }
 }
 
@@ -163,10 +167,6 @@ void scanCallback(const Gap::AdvertisementCallbackParams_t * params)
             LOG("Sync packet received !\n");
             BLE::Instance().gap().stopScan();
             bleQueue.call_in(2500, synchronisationCallBack);
-            //BLE::Instance().gap().reset();
-            //BLE::Instance().init(bleInitComplete);
-            //BLE::Instance().gap().startAdvertising();
-            //blink_id = bleQueue.call_every(500, blink);
         }
     }
         //LOG("addr received: [%02x %02x %02x %02x %02x %02x] RSSI : %d dB Length: %d\n", params->peerAddr[5], params->peerAddr[4], params->peerAddr[3],
@@ -177,7 +177,6 @@ void startScan()
 {
     BLE::Instance().gap().setScanParams(2000, 2000, 0); //20 ms scan interval and window
     if (BLE::Instance().gap().startScan(scanCallback) == BLE_ERROR_NONE) {
-        //dataQueue.cancel(loop_id);
         ticker.detach();
         led1 = 0;
         LOG("Scan Started\n");
@@ -192,14 +191,9 @@ void waitSyncPacket()
     sync = 0;
     if (BLE::Instance().getGapState().connected) {
         BLE::Instance().gap().disconnect(Gap::DisconnectionReason_t::LOCAL_HOST_TERMINATED_CONNECTION);
-        //wait_ms(500);
     }
     bleQueue.cancel(blink_id);
     timer.reset();
-    /*else {
-        bleQueue.cancel(blink_id);
-        BLE::Instance().gap().stopAdvertising();
-    }*/
 }
 
 void uartDataWrittenCallback(const GattWriteCallbackParams * params)
@@ -217,7 +211,6 @@ void uartDataWrittenCallback(const GattWriteCallbackParams * params)
 void disconnectionCallback(const Gap::DisconnectionCallbackParams_t *params)
 {
     LOG("Disconnected!\n");
-    //dataQueue.cancel(loop_id);
     ticker.detach();
     /* If local host terminated connection, we assume that it is to start a scan so we dont restart advertising  */
     if (params->reason != Gap::DisconnectionReason_t::LOCAL_HOST_TERMINATED_CONNECTION) {
@@ -251,15 +244,13 @@ void connectionCallback (const Gap::ConnectionCallbackParams_t *params)
     bleQueue.cancel(blink_id);
     led1 = 1;
     LOG("Connected !\n");
-    //printf("min interval: %d\n", params->connectionParams->minConnectionInterval);
-    //printf("max interval: %d\n", params->connectionParams->maxConnectionInterval);
 
     bleQueue.call(updateConnectionParams);
+
     // Start streaming if we are not synchronised. If we are, streaming is already started
     if (sync == 0) {
         ticker.attach_us(periodicCallback, 1000*period_ms);
     }
-    //loop_id = dataQueue.call_every(20, periodicCallback); // 50 Hz
 }
 
 void onBleInitError(BLE &ble, ble_error_t error)
@@ -362,11 +353,11 @@ int main()
 	uwLsiFreq = LSI_VALUE;
 
 	/*# Configure & Start the IWDG peripheral #########################################*/
-	/* Set counter reload value to obtain 5 sec. IWDG TimeOut.
+	/* Set counter reload value to obtain 4 sec. IWDG TimeOut.
 	 IWDG counter clock Frequency = uwLsiFreq
-	 Set Prescaler to 32 (IWDG_PRESCALER_32)
+	 Set Prescaler to 128 (IWDG_PRESCALER_128)
 	 Timeout Period = (Reload Counter Value * 32) / uwLsiFreq
-	 So Set Reload Counter Value = (5 * uwLsiFreq) / 32 */
+	 So Set Reload Counter Value = uwLsiFreq / 32 */
 	IwdgHandle.Instance = IWDG;
 	IwdgHandle.Init.Prescaler = IWDG_PRESCALER_128;
 	IwdgHandle.Init.Reload = (uwLsiFreq / 32 );
@@ -379,10 +370,6 @@ int main()
 	}
 
     data_thread.set_priority(osPriorityRealtime7);
-    //ble_thread.set_priority(osPriorityHigh);
-
-    //data_thread.start(callback(&dataQueue, &EventQueue::dispatch_forever));
-    //ble_thread.start(callback(&bleQueue, &EventQueue::dispatch_forever));
 
     user_button.rise(button_handler);
 
@@ -394,6 +381,9 @@ int main()
     }
 
     if (gauge.configure(1, 800, 3.3, false, false)) {
+        gauge.set_current_alerts(80, -40);
+        gauge.enable_alerts();
+        battery_level = static_cast<uint8_t>(gauge.state_of_charge());
         printf("Gauge initialized ! \n");
     }
     else {
@@ -404,10 +394,6 @@ int main()
     bma.set_power_mode(BMA280::PowerMode::PowerMode_DEEP_SUSPEND);
     bmg.set_power_mode(BMG160::PowerMode::DEEPSUSPEND);
     ak8963.power_off();
-
-    battery_level = static_cast<uint8_t>(gauge.state_of_charge());
-    gauge.set_current_alerts(80, -40);
-    gauge.enable_alerts();
 
     BLE &ble = BLE::Instance();
     ble.onEventsToProcess(scheduleBleEventsProcessing);
