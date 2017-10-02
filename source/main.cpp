@@ -31,9 +31,11 @@
 
 using namespace sixtron;
 
-#define NEED_LOG 0 /* Set this if you need debug messages on the console; */
-#define KOMBOS_FREQUENCY	50.0
-#define NODE_ID			0x01
+#define NEED_LOG 						0 /* Set this if you need debug messages on the console; */
+#define KOMBOS_FREQUENCY				50.0
+#define NODE_ID							0x03
+#define BLE_CONNECTION_INTERVAL_MIN		32 /* The BLE connection interval in unit of 1.25 ms */
+#define BLE_CONNECTION_INTERVAL_MAX		32
 
 #define BLE_PRINT(STR) { if (uartServicePtr) uartServicePtr->write(STR, strlen(STR));/* printf("%d\n", strlen(STR));*/ }
 #define BLE_PRINT2(STR, SIZE) { if (uartServicePtr) uartServicePtr->write(STR, SIZE); /*printf("%d\n", SIZE);*/ }
@@ -79,7 +81,7 @@ static AK8963 ak8963(&i2c);
 static Gap::Handle_t gap_h;
 static Gap::ConnectionParams_t gap_params;
 
-const static char     DEVICE_NAME[] = "NODE 1";
+const static char     DEVICE_NAME[] = "NODE 3";
 static const uint16_t uuid16_list[] = {GattService::UUID_BATTERY_SERVICE};
 
 static bno055_raw_quaternion_t quat;
@@ -126,6 +128,7 @@ void getSensorValue()
             ticker.attach_us(periodicCallback, 1000*period_ms);
             timer.reset();
         }
+
         timestamp = timer.read_ms() + real_time_correction - timestamp_offset;
         bno.read_quaternion(&quat);
         bno.get_calibration_status(&system_calib, &gyro_calib, &accel_calib, &mag_calib);
@@ -229,8 +232,8 @@ void updateConnectionParams()
     BLE &ble = BLE::Instance();
     if (ble.getGapState().connected) {
         gap_params.connectionSupervisionTimeout = 500;
-        gap_params.minConnectionInterval = 16;//20;
-        gap_params.maxConnectionInterval = 18;//22;
+        gap_params.minConnectionInterval = BLE_CONNECTION_INTERVAL_MIN;
+        gap_params.maxConnectionInterval = BLE_CONNECTION_INTERVAL_MAX;
         gap_params.slaveLatency = 0;
 
         LOG("Request a connection params update!\n");
@@ -279,8 +282,8 @@ void bleInitComplete(BLE::InitializationCompleteCallbackContext *params)
     ble.gap().setDeviceName((uint8_t*) DEVICE_NAME);
 
     gap_params.connectionSupervisionTimeout = 500;
-    gap_params.minConnectionInterval = 16;
-    gap_params.maxConnectionInterval = 18;
+    gap_params.minConnectionInterval = BLE_CONNECTION_INTERVAL_MIN;
+    gap_params.maxConnectionInterval = BLE_CONNECTION_INTERVAL_MAX;
     gap_params.slaveLatency = 0;
 
     ble.gap().setPreferredConnectionParams(&gap_params);
