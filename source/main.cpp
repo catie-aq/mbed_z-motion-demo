@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-
 #include <events/mbed_events.h>
 #include <mbed.h>
 #include "ble/BLE.h"
 #include "ble/Gap.h"
 #include "ble/services/UARTService.h"
 #include "ble/services/BatteryService.h"
-#include "MAX17201.hpp"
-#include "bno055.hpp"
+#include "max17201.h"
+#include "bno055.h"
 #include "bme280.h"
 #include "bmg160.h"
 #include "bma280.h"
@@ -33,7 +32,7 @@ using namespace sixtron;
 
 #define NEED_LOG 						0 /* Set this if you need debug messages on the console; */
 #define KOMBOS_FREQUENCY				50.0
-#define NODE_ID							0x03
+#define NODE_ID							0x02
 #define BLE_CONNECTION_INTERVAL_MIN		32 /* The BLE connection interval in unit of 1.25 ms */
 #define BLE_CONNECTION_INTERVAL_MAX		32
 
@@ -81,7 +80,7 @@ static AK8963 ak8963(&i2c);
 static Gap::Handle_t gap_h;
 static Gap::ConnectionParams_t gap_params;
 
-const static char     DEVICE_NAME[] = "NODE 3";
+const static char     DEVICE_NAME[] = "NODE 2";
 static const uint16_t uuid16_list[] = {GattService::UUID_BATTERY_SERVICE};
 
 static bno055_raw_quaternion_t quat;
@@ -325,8 +324,8 @@ void print_gauge_info()
 
 void update_battery_info()
 {
+	battery_level = static_cast<uint8_t>(gauge.state_of_charge());
     if (BLE::Instance().getGapState().connected) {
-        battery_level = static_cast<uint8_t>(gauge.state_of_charge());
         battery_service->updateBatteryLevel(battery_level);
     }
 }
@@ -351,6 +350,8 @@ int main()
     printf("10 s counter correction : %d\n", ten_s_correction);
     timer.start();
 
+    /* ========== Init WatchDog ========== */
+
 	/* Clear reset flags in any cases */
 	__HAL_RCC_CLEAR_RESET_FLAGS(); // clear reset flags that may be rised by watchdog
 
@@ -374,25 +375,27 @@ int main()
 		printf("Can't init Watchdog !\n");
 	}
 
-    data_thread.set_priority(osPriorityRealtime7);
+    /* ========== Init Components ========== */
 
-    user_button.rise(button_handler);
-
-    if (bno.initialize(BNO055::OperationMode::OperationMode_NDOF_FMC_OFF, true)) {
+    if (bno.initialize(BNO055::OperationMode::NDOF_FMC_OFF, true)) {
         printf("BNO initialized !\n");
     }
     else {
         printf("Fail to initialize BNO055 ! \n");
     }
 
-    if (gauge.configure(1, 800, 3.3, false, false)) {
-        gauge.set_current_alerts(80, -40);
-        gauge.enable_alerts();
-        battery_level = static_cast<uint8_t>(gauge.state_of_charge());
-        printf("Gauge initialized ! \n");
-    }
-    else {
-        printf("Fail to initialized MAX17201 gauge ! \n");
+    /* If gauge design capacity is 750 mAh, it means that the gauge has lost its
+     * configuration and learning so it needs to be configured again */
+    if (gauge.design_capacity() == 750) {
+    	if (gauge.configure(1, 800, 3.1, false, false)) {
+    		battery_level = uint8_t(gauge.state_of_charge());
+    		printf("Gauge initialized ! \n");
+    	} else {
+            printf("Fail to initialized MAX17201 gauge ! \n");
+    	}
+    } else {
+    	printf("Gauge already configured\n");
+    	battery_level = uint8_t(gauge.state_of_charge());
     }
 
     bme.set_power_mode(BME280::SensorMode::SLEEP);
@@ -400,13 +403,17 @@ int main()
     bmg.set_power_mode(BMG160::PowerMode::DEEPSUSPEND);
     ak8963.power_off();
 
+    /* ========== Configure tasks ========== */
+
     BLE &ble = BLE::Instance();
     ble.onEventsToProcess(scheduleBleEventsProcessing);
     ble.init(bleInitComplete);
     ble.gap().onConnection(connectionCallback);
 
+    user_button.rise(button_handler);
     bleQueue.call_every(30000, update_battery_info);
     bleQueue.call_every(2000, watchdog_refresh);
+    data_thread.set_priority(osPriorityRealtime7);
     data_thread.start(callback(getSensorValue));
     bleQueue.dispatch_forever();
     return 0;
