@@ -1,6 +1,6 @@
-# KOMBOS intertial node
+# BLE Gatt Service
 
-This is the mbed-os project for the BLE intertial nodes, designed for the KOMBOS project.
+This is an mbed-os project to design a BLE node that can stream data through a custom GATT service called UART service.
 The main file is in the `source` folder.
 
 ## Compile the project
@@ -12,6 +12,5 @@ The main file is in the `source` folder.
 ## Modify the node settings
 
 * You can change the name of the node by editting the variable `DEVICE_NAME`
-* You can change the node ID, which is including into the BLE frames, by editting the variable `NODE_ID`
-* you can modify the frequency of the node by editting the variable `KOMBOS_FREQUENCY`
+* you can modify the conection parameters by editting the variable `CONNECTION_INTERVAL_MIN` and `CONNECTION_INTERVAL_MAX`
 * Set the `NEED_LOG` define to 1 if you want more info on the serial link
