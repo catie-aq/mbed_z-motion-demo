@@ -73,7 +73,7 @@ static uint8_t inertial_data[20];
 static Gap::Handle_t gap_h;
 static Gap::ConnectionParams_t gap_params;
 
-const static char     DEVICE_NAME[] = "NODE 1";
+const static char     DEVICE_NAME[] = "PIERRE-MARIE";
 static const uint16_t uuid16_list[] = {GattService::UUID_BATTERY_SERVICE, GattService::UUID_ENVIRONMENTAL_SERVICE};
 static uint8_t stream_config = 0;
 
@@ -171,10 +171,12 @@ void bleInitComplete(BLE::InitializationCompleteCallbackContext *params)
 
     ble.gattServer().onDataWritten(uartDataWrittenCallback);
 
+    uint8_t deviceID[5] = {0x36, 0x54, 0x52, 0x4F, 0x4E};
     /* Setup advertising. */
     ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::BREDR_NOT_SUPPORTED | GapAdvertisingData::LE_GENERAL_DISCOVERABLE);
     ble.gap().setAdvertisingType(GapAdvertisingParams::ADV_CONNECTABLE_UNDIRECTED);
     ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::COMPLETE_LOCAL_NAME, (uint8_t *)DEVICE_NAME, sizeof(DEVICE_NAME));
+    ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::MANUFACTURER_SPECIFIC_DATA, (uint8_t *) deviceID, 5);
     ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::COMPLETE_LIST_16BIT_SERVICE_IDS, (uint8_t *) uuid16_list, sizeof(uuid16_list));
     ble.gap().accumulateAdvertisingPayload(GapAdvertisingData::COMPLETE_LIST_128BIT_SERVICE_IDS, (uint8_t *)UARTServiceUUID_reversed, sizeof(UARTServiceUUID_reversed));
 
@@ -260,7 +262,7 @@ void update_inertial_data() {
 		inertial_data[17] = (int16_t(mag.z*100) & 0xFF); inertial_data[18] = (int16_t(mag.z*100) >> 8) & 0xFF; 		 // mag
 
 		inertial_data[19] = 0x0A; // "\n"
-	    BLE_PRINT2(inertial_data, 20);
+	    //BLE_PRINT2(inertial_data, 20);
 		break;
 
 	case 0x01: // Orientation (Euler) + Accelerometer
@@ -277,7 +279,7 @@ void update_inertial_data() {
 		inertial_data[11] = (int16_t(euler.z*180/3.14*100) & 0xFF); inertial_data[12] = (int16_t(euler.z*180/3.14*100) >> 8) & 0xFF; 	 // euler
 
 		inertial_data[13] = 0x0A; // "\n"
-	    BLE_PRINT2(inertial_data, 14);
+	    //BLE_PRINT2(inertial_data, 14);
 		break;
 
 	case 0x02:
@@ -295,7 +297,9 @@ void update_inertial_data() {
 		inertial_data[13] = (int16_t(quat.z) & 0xFF); inertial_data[14] = (int16_t(quat.z) >> 8) & 0xFF; 	 // quat
 
 		inertial_data[15] = 0x0A; // "\n"
+		//printf("QUA:%d,%d,%d,%d\n", quat.w, quat.x, quat.y, quat.z);
 	    BLE_PRINT2(inertial_data, 16);
+	    //printf("%.3f %.3f %.3f\n", accel.x, accel.y, accel.z);
 		break;
 
 	default:
@@ -317,7 +321,7 @@ void update_inertial_data() {
 		inertial_data[17] = (int16_t(mag.z*100) & 0xFF); inertial_data[18] = (int16_t(mag.z*100) >> 8) & 0xFF; 		 // mag
 
 		inertial_data[19] = 0x0A; // "\n"
-	    BLE_PRINT2(inertial_data, 20);
+	    //BLE_PRINT2(inertial_data, 20);
 		break;
 	}
 }
