@@ -24,6 +24,16 @@
                                   "BLUENRG_PIN_SPI_RESET=DIO2",
                                   "BLUENRG_PIN_SPI_IRQ=DIO4",
                                   "BLUENRG_PIN_SPI_SCK=SPI1_SCK"]
+        },
+        "Z_MOTION": {
+            "target.features_add": ["BLE"],
+            "target.extra_labels_add": ["ST_BLUENRG"],
+            "target.macros_add": ["BLUENRG_PIN_SPI_MOSI=SPI_MOSI",
+                                  "BLUENRG_PIN_SPI_MISO=SPI_MISO",
+                                  "BLUENRG_PIN_SPI_nCS=SPI1_CS",
+                                  "BLUENRG_PIN_SPI_RESET=PB_0",
+                                  "BLUENRG_PIN_SPI_IRQ=PC_4",
+                                  "BLUENRG_PIN_SPI_SCK=SPI1_SCK"]
         }
     }
 }
