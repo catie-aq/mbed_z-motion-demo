@@ -28,9 +28,10 @@
 
 using namespace sixtron;
 
-#define NEED_LOG 						0 /* Set this if you need debug messages on the console; */
+namespace {
+#define NEED_LOG 				0 /* Set this if you need debug messages on the console; */
 #define BLE_CONNECTION_INTERVAL_MIN		16 /* The BLE connection interval in unit of 1.25 ms */
-#define BLE_CONNECTION_INTERVAL_MAX		32
+#define BLE_CONNECTION_INTERVAL_MAX		16
 
 #define BLE_PRINT(STR) { if (uartServicePtr) uartServicePtr->write(STR, strlen(STR)); wait_ms(BLE_CONNECTION_INTERVAL_MAX*1.25);}
 #define BLE_PRINT2(STR, SIZE) { if (uartServicePtr) uartServicePtr->write(STR, SIZE); wait_ms(BLE_CONNECTION_INTERVAL_MAX*1.25);}
@@ -41,15 +42,21 @@ using namespace sixtron;
 #define LOG(...) /* nothing */
 #endif /* #if NEED_CONSOLE_OUTPUT */
 
+#define STM32L496RG_BOOTLOADER_ADDRESS 0x1FFF0000
+#define LED_ON_LOW_POWER   0.05
+#define LED_ON             1
+#define LED_OFF            0
+}
+
 /* Peripherals definitions */
-InterruptIn user_button(USER_BUTTON);
-DigitalOut led1(LED1, 1);
+//InterruptIn user_button(USER_BUTTON);
+PwmOut led1(LED1);
 I2C i2c(I2C_SDA, I2C_SCL);
 Serial pc(SERIAL_TX, SERIAL_RX);
 
 /* Time management objects */
 static EventQueue bleQueue; //(/* event count */ 16 * /* event size */ 32);
-static int blink_id;
+static int blink_id, inertial_id;
 static IWDG_HandleTypeDef   IwdgHandle; // Watchdog
 static uint32_t uwLsiFreq = 0;
 
@@ -64,16 +71,16 @@ static float pressure;
 static float humidity;
 static uint8_t battery_level = 50;
 static bno055_raw_quaternion_t quat;
-static bno055_accel_t  accel;
-static bno055_gyro_t gyro;
-static bno055_mag_t mag;
+static bno055_accelerometer_t  accel;
+static bno055_gyroscope_t gyro;
+static bno055_magnetometer_t mag;
 static bno055_euler_t euler;
 static uint8_t inertial_data[20];
 
 static Gap::Handle_t gap_h;
 static Gap::ConnectionParams_t gap_params;
 
-const static char     DEVICE_NAME[] = "PIERRE-MARIE";
+const static char     DEVICE_NAME[] = "PAN1";
 static const uint16_t uuid16_list[] = {GattService::UUID_BATTERY_SERVICE, GattService::UUID_ENVIRONMENTAL_SERVICE};
 static uint8_t stream_config = 0;
 
@@ -83,7 +90,11 @@ static EnvironmentalService * envServicePtr;
 
 void blink()
 {
-    led1 = !led1;
+	if (led1 == LED_OFF) {
+		led1 = LED_ON_LOW_POWER;
+	} else {
+		led1 = LED_OFF;
+	}
 }
 
 void uartDataWrittenCallback(const GattWriteCallbackParams * params)
@@ -93,17 +104,134 @@ void uartDataWrittenCallback(const GattWriteCallbackParams * params)
         if (params->len == 1) {
         	stream_config = *params->data;
         }
+        if (strcmp((const char*) params->data, "DFU") == 0) {
+                    LOG("Entering DFU mode !\n");
+                    mbed_start_application(STM32L496RG_BOOTLOADER_ADDRESS);
+        }
+
     }
+}
+
+void update_battery_info()
+{
+    battery_level = static_cast<uint8_t>(gauge.state_of_charge());
+    if (BLE::Instance().getGapState().connected) {
+        batteryServicePtr->updateBatteryLevel(battery_level);
+    }
+}
+
+void update_environmental_data() {
+    // get environment data from sensor
+    temperature = bme.temperature();
+    pressure = bme.pressure();
+    humidity = bme.humidity();
+
+    if (!isnan(temperature)) {
+    	envServicePtr->updateTemperature(temperature);
+    }
+    if (!isnan(humidity)) {
+    	envServicePtr->updateHumidity(humidity);
+    }
+    if (!isnan(pressure)) {
+    	envServicePtr->updatePressure(pressure);
+    }
+
+}
+
+void update_inertial_data() {
+
+	switch(stream_config) {
+	case 0x00: // Sensors raw data
+		accel = bno.accelerometer();
+		gyro = bno.gyroscope();
+		mag = bno.magnetometer();
+
+		inertial_data[0] = stream_config; // Stream configuration
+		inertial_data[1] = (int16_t(accel.x*100) & 0xFF); inertial_data[2] = (int16_t(accel.x*100) >> 8) & 0xFF; 	 // accel
+		inertial_data[3] = (int16_t(accel.y*100) & 0xFF); inertial_data[4] = (int16_t(accel.y*100) >> 8) & 0xFF; 	 // accel
+		inertial_data[5] = (int16_t(accel.z*100) & 0xFF); inertial_data[6] = (int16_t(accel.z*100) >> 8) & 0xFF; 	 // accel
+
+		inertial_data[7] = (int16_t(gyro.x*100) & 0xFF); inertial_data[8] = (int16_t(gyro.x*100) >> 8) & 0xFF; 	 	 // gyro
+		inertial_data[9] = (int16_t(gyro.y*100) & 0xFF); inertial_data[10] = (int16_t(gyro.y*100) >> 8) & 0xFF; 	 // gyro
+		inertial_data[11] = (int16_t(gyro.z*100) & 0xFF); inertial_data[12] = (int16_t(gyro.z*100) >> 8) & 0xFF; 	 // gyro
+
+		inertial_data[13] = (int16_t(mag.x*100) & 0xFF); inertial_data[14] = (int16_t(mag.x*100) >> 8) & 0xFF; 		 // mag
+		inertial_data[15] = (int16_t(mag.y*100) & 0xFF); inertial_data[16] = (int16_t(mag.y*100) >> 8) & 0xFF; 		 // mag
+		inertial_data[17] = (int16_t(mag.z*100) & 0xFF); inertial_data[18] = (int16_t(mag.z*100) >> 8) & 0xFF; 		 // mag
+
+		inertial_data[19] = 0x0A; // "\n"
+	        BLE_PRINT2(inertial_data, 20);
+		break;
+
+	case 0x01: // Orientation (Euler) + Accelerometer
+		euler = bno.euler();
+		accel = bno.accelerometer();
+
+		inertial_data[0] = stream_config; // Stream configuration
+		inertial_data[1] = (int16_t(accel.x*100) & 0xFF); inertial_data[2] = (int16_t(accel.x*100) >> 8) & 0xFF; 	 // accel
+		inertial_data[3] = (int16_t(accel.y*100) & 0xFF); inertial_data[4] = (int16_t(accel.y*100) >> 8) & 0xFF; 	 // accel
+		inertial_data[5] = (int16_t(accel.z*100) & 0xFF); inertial_data[6] = (int16_t(accel.z*100) >> 8) & 0xFF; 	 // accel
+
+		inertial_data[7] = (int16_t(euler.x*180/3.14*100) & 0xFF); inertial_data[8] = (int16_t(euler.x*180/3.14*1000) >> 8) & 0xFF; 	 // euler
+		inertial_data[9] = (int16_t(euler.y*180/3.14*100) & 0xFF); inertial_data[10] = (int16_t(euler.y*180/3.14*100) >> 8) & 0xFF; 	 // euler
+		inertial_data[11] = (int16_t(euler.z*180/3.14*100) & 0xFF); inertial_data[12] = (int16_t(euler.z*180/3.14*100) >> 8) & 0xFF; 	 // euler
+
+		inertial_data[13] = 0x0A; // "\n"
+	        BLE_PRINT2(inertial_data, 14);
+		break;
+
+	case 0x02:
+		quat = bno.raw_quaternion();
+		accel = bno.accelerometer();
+
+		inertial_data[0] = stream_config; // Stream configuration
+		inertial_data[1] = (int16_t(accel.x*100) & 0xFF); inertial_data[2] = (int16_t(accel.x*100) >> 8) & 0xFF; 	 // accel
+		inertial_data[3] = (int16_t(accel.y*100) & 0xFF); inertial_data[4] = (int16_t(accel.y*100) >> 8) & 0xFF; 	 // accel
+		inertial_data[5] = (int16_t(accel.z*100) & 0xFF); inertial_data[6] = (int16_t(accel.z*100) >> 8) & 0xFF; 	 // accel
+
+		inertial_data[7] = (int16_t(quat.w) & 0xFF); inertial_data[8] = (int16_t(quat.w) >> 8) & 0xFF; 	 	 // quat
+		inertial_data[9] = (int16_t(quat.x) & 0xFF); inertial_data[10] = (int16_t(quat.x) >> 8) & 0xFF; 	 // quat
+		inertial_data[11] = (int16_t(quat.y) & 0xFF); inertial_data[12] = (int16_t(quat.y) >> 8) & 0xFF; 	 // quat
+		inertial_data[13] = (int16_t(quat.z) & 0xFF); inertial_data[14] = (int16_t(quat.z) >> 8) & 0xFF; 	 // quat
+
+		inertial_data[15] = 0x0A; // "\n"
+		//printf("QUA:%d,%d,%d,%d\n", quat.w, quat.x, quat.y, quat.z);
+	        BLE_PRINT2(inertial_data, 16);
+	        //printf("%.3f %.3f %.3f\n", accel.x, accel.y, accel.z);
+		break;
+
+	default:
+		accel = bno.accelerometer();
+		gyro = bno.gyroscope();
+		mag = bno.magnetometer();
+
+		inertial_data[0] = stream_config; // Stream configuration
+		inertial_data[1] = (int16_t(accel.x*100) & 0xFF); inertial_data[2] = (int16_t(accel.x*100) >> 8) & 0xFF; 	 // accel
+		inertial_data[3] = (int16_t(accel.y*100) & 0xFF); inertial_data[4] = (int16_t(accel.y*100) >> 8) & 0xFF; 	 // accel
+		inertial_data[5] = (int16_t(accel.z*100) & 0xFF); inertial_data[6] = (int16_t(accel.z*100) >> 8) & 0xFF; 	 // accel
+
+		inertial_data[7] = (int16_t(gyro.x*100) & 0xFF); inertial_data[8] = (int16_t(gyro.x*100) >> 8) & 0xFF; 	 	 // gyro
+		inertial_data[9] = (int16_t(gyro.y*100) & 0xFF); inertial_data[10] = (int16_t(gyro.y*100) >> 8) & 0xFF; 	 // gyro
+		inertial_data[11] = (int16_t(gyro.z*100) & 0xFF); inertial_data[12] = (int16_t(gyro.z*100) >> 8) & 0xFF; 	 // gyro
+
+		inertial_data[13] = (int16_t(mag.x*100) & 0xFF); inertial_data[14] = (int16_t(mag.x*100) >> 8) & 0xFF; 		 // mag
+		inertial_data[15] = (int16_t(mag.y*100) & 0xFF); inertial_data[16] = (int16_t(mag.y*100) >> 8) & 0xFF; 		 // mag
+		inertial_data[17] = (int16_t(mag.z*100) & 0xFF); inertial_data[18] = (int16_t(mag.z*100) >> 8) & 0xFF; 		 // mag
+
+		inertial_data[19] = 0x0A; // "\n"
+	        BLE_PRINT2(inertial_data, 20);
+		break;
+	}
 }
 
 void disconnectionCallback(const Gap::DisconnectionCallbackParams_t *params)
 {
     LOG("Disconnected!\n");
-    /* If local host terminated connection, we assume that it is to start a scan so we dont restart advertising  */
-    if (params->reason != Gap::DisconnectionReason_t::LOCAL_HOST_TERMINATED_CONNECTION) {
-        blink_id = bleQueue.call_every(200, blink);
-        BLE::Instance().gap().startAdvertising(); // restart advertising
-    }
+    bleQueue.cancel(inertial_id);
+    bno.set_operation_mode(BNO055::OperationMode::CONFIG);
+    bno.set_power_mode(BNO055::PowerMode::SUSPEND);
+	blink_id = bleQueue.call_every(200, blink);
+	BLE::Instance().gap().startAdvertising(); // restart advertising
 }
 
 void updateConnectionParams()
@@ -126,7 +254,11 @@ void connectionCallback (const Gap::ConnectionCallbackParams_t *params)
 {
     gap_h = params->handle;
     bleQueue.cancel(blink_id);
-    led1 = 1;
+    bno.set_power_mode(BNO055::PowerMode::NORMAL);
+    wait_ms(800);
+    bno.set_operation_mode(BNO055::OperationMode::NDOF);
+    inertial_id = bleQueue.call_every(20, update_inertial_data);
+    led1 = LED_OFF;
     LOG("Connected !\n");
 
     bleQueue.call(updateConnectionParams);
@@ -213,119 +345,6 @@ void print_gauge_info()
     BLE_PRINT2(buffer, strlen(buffer));
 }
 
-void update_battery_info()
-{
-    battery_level = static_cast<uint8_t>(gauge.state_of_charge());
-    if (BLE::Instance().getGapState().connected) {
-        batteryServicePtr->updateBatteryLevel(battery_level);
-    }
-}
-
-void update_environmental_data() {
-    // get environment data from sensor
-    temperature = bme.temperature();
-    printf("temperature: %f\n", temperature);
-    pressure = bme.pressure();
-    humidity = bme.humidity();
-
-    if (!isnan(temperature)) {
-    	envServicePtr->updateTemperature(temperature);
-    }
-    if (!isnan(humidity)) {
-    	envServicePtr->updateHumidity(humidity);
-    }
-    if (!isnan(pressure)) {
-    	envServicePtr->updatePressure(pressure);
-    }
-
-}
-
-void update_inertial_data() {
-
-	switch(stream_config) {
-	case 0x00: // Sensors raw data
-		bno.read_accel(&accel);
-		bno.read_gyro(&gyro);
-		bno.read_mag(&mag);
-
-		inertial_data[0] = stream_config; // Stream configuration
-		inertial_data[1] = (int16_t(accel.x*100) & 0xFF); inertial_data[2] = (int16_t(accel.x*100) >> 8) & 0xFF; 	 // accel
-		inertial_data[3] = (int16_t(accel.y*100) & 0xFF); inertial_data[4] = (int16_t(accel.y*100) >> 8) & 0xFF; 	 // accel
-		inertial_data[5] = (int16_t(accel.z*100) & 0xFF); inertial_data[6] = (int16_t(accel.z*100) >> 8) & 0xFF; 	 // accel
-
-		inertial_data[7] = (int16_t(gyro.x*100) & 0xFF); inertial_data[8] = (int16_t(gyro.x*100) >> 8) & 0xFF; 	 	 // gyro
-		inertial_data[9] = (int16_t(gyro.y*100) & 0xFF); inertial_data[10] = (int16_t(gyro.y*100) >> 8) & 0xFF; 	 // gyro
-		inertial_data[11] = (int16_t(gyro.z*100) & 0xFF); inertial_data[12] = (int16_t(gyro.z*100) >> 8) & 0xFF; 	 // gyro
-
-		inertial_data[13] = (int16_t(mag.x*100) & 0xFF); inertial_data[14] = (int16_t(mag.x*100) >> 8) & 0xFF; 		 // mag
-		inertial_data[15] = (int16_t(mag.y*100) & 0xFF); inertial_data[16] = (int16_t(mag.y*100) >> 8) & 0xFF; 		 // mag
-		inertial_data[17] = (int16_t(mag.z*100) & 0xFF); inertial_data[18] = (int16_t(mag.z*100) >> 8) & 0xFF; 		 // mag
-
-		inertial_data[19] = 0x0A; // "\n"
-	    //BLE_PRINT2(inertial_data, 20);
-		break;
-
-	case 0x01: // Orientation (Euler) + Accelerometer
-		bno.read_euler(&euler);
-		bno.read_accel(&accel);
-
-		inertial_data[0] = stream_config; // Stream configuration
-		inertial_data[1] = (int16_t(accel.x*100) & 0xFF); inertial_data[2] = (int16_t(accel.x*100) >> 8) & 0xFF; 	 // accel
-		inertial_data[3] = (int16_t(accel.y*100) & 0xFF); inertial_data[4] = (int16_t(accel.y*100) >> 8) & 0xFF; 	 // accel
-		inertial_data[5] = (int16_t(accel.z*100) & 0xFF); inertial_data[6] = (int16_t(accel.z*100) >> 8) & 0xFF; 	 // accel
-
-		inertial_data[7] = (int16_t(euler.x*180/3.14*100) & 0xFF); inertial_data[8] = (int16_t(euler.x*180/3.14*1000) >> 8) & 0xFF; 	 // euler
-		inertial_data[9] = (int16_t(euler.y*180/3.14*100) & 0xFF); inertial_data[10] = (int16_t(euler.y*180/3.14*100) >> 8) & 0xFF; 	 // euler
-		inertial_data[11] = (int16_t(euler.z*180/3.14*100) & 0xFF); inertial_data[12] = (int16_t(euler.z*180/3.14*100) >> 8) & 0xFF; 	 // euler
-
-		inertial_data[13] = 0x0A; // "\n"
-	    //BLE_PRINT2(inertial_data, 14);
-		break;
-
-	case 0x02:
-		bno.read_quaternion(&quat);
-		bno.read_accel(&accel);
-
-		inertial_data[0] = stream_config; // Stream configuration
-		inertial_data[1] = (int16_t(accel.x*100) & 0xFF); inertial_data[2] = (int16_t(accel.x*100) >> 8) & 0xFF; 	 // accel
-		inertial_data[3] = (int16_t(accel.y*100) & 0xFF); inertial_data[4] = (int16_t(accel.y*100) >> 8) & 0xFF; 	 // accel
-		inertial_data[5] = (int16_t(accel.z*100) & 0xFF); inertial_data[6] = (int16_t(accel.z*100) >> 8) & 0xFF; 	 // accel
-
-		inertial_data[7] = (int16_t(quat.w) & 0xFF); inertial_data[8] = (int16_t(quat.w) >> 8) & 0xFF; 	 	 // quat
-		inertial_data[9] = (int16_t(quat.x) & 0xFF); inertial_data[10] = (int16_t(quat.x) >> 8) & 0xFF; 	 // quat
-		inertial_data[11] = (int16_t(quat.y) & 0xFF); inertial_data[12] = (int16_t(quat.y) >> 8) & 0xFF; 	 // quat
-		inertial_data[13] = (int16_t(quat.z) & 0xFF); inertial_data[14] = (int16_t(quat.z) >> 8) & 0xFF; 	 // quat
-
-		inertial_data[15] = 0x0A; // "\n"
-		//printf("QUA:%d,%d,%d,%d\n", quat.w, quat.x, quat.y, quat.z);
-	    BLE_PRINT2(inertial_data, 16);
-	    //printf("%.3f %.3f %.3f\n", accel.x, accel.y, accel.z);
-		break;
-
-	default:
-		bno.read_accel(&accel);
-		bno.read_gyro(&gyro);
-		bno.read_mag(&mag);
-
-		inertial_data[0] = stream_config; // Stream configuration
-		inertial_data[1] = (int16_t(accel.x*100) & 0xFF); inertial_data[2] = (int16_t(accel.x*100) >> 8) & 0xFF; 	 // accel
-		inertial_data[3] = (int16_t(accel.y*100) & 0xFF); inertial_data[4] = (int16_t(accel.y*100) >> 8) & 0xFF; 	 // accel
-		inertial_data[5] = (int16_t(accel.z*100) & 0xFF); inertial_data[6] = (int16_t(accel.z*100) >> 8) & 0xFF; 	 // accel
-
-		inertial_data[7] = (int16_t(gyro.x*100) & 0xFF); inertial_data[8] = (int16_t(gyro.x*100) >> 8) & 0xFF; 	 	 // gyro
-		inertial_data[9] = (int16_t(gyro.y*100) & 0xFF); inertial_data[10] = (int16_t(gyro.y*100) >> 8) & 0xFF; 	 // gyro
-		inertial_data[11] = (int16_t(gyro.z*100) & 0xFF); inertial_data[12] = (int16_t(gyro.z*100) >> 8) & 0xFF; 	 // gyro
-
-		inertial_data[13] = (int16_t(mag.x*100) & 0xFF); inertial_data[14] = (int16_t(mag.x*100) >> 8) & 0xFF; 		 // mag
-		inertial_data[15] = (int16_t(mag.y*100) & 0xFF); inertial_data[16] = (int16_t(mag.y*100) >> 8) & 0xFF; 		 // mag
-		inertial_data[17] = (int16_t(mag.z*100) & 0xFF); inertial_data[18] = (int16_t(mag.z*100) >> 8) & 0xFF; 		 // mag
-
-		inertial_data[19] = 0x0A; // "\n"
-	    //BLE_PRINT2(inertial_data, 20);
-		break;
-	}
-}
-
 void button_handler()
 {
     bleQueue.call(print_gauge_info);
@@ -340,6 +359,7 @@ int main()
 {
     pc.baud(115200);
     i2c.frequency(400000);
+    led1.period_ms(1);
     printf("Start up...\n\r");
     printf("SystemCoreClock : %d\n", SystemCoreClock);
 
@@ -374,7 +394,7 @@ int main()
     /* If gauge design capacity is 750 mAh, it means that the gauge has lost its
      * configuration and learning so it needs to be configured again */
     if (gauge.design_capacity() == 750) {
-    	if (gauge.configure(1, 800, 3.1, false, false)) {
+    	if (gauge.configure(1, 160, 3.0, false, false)) {
     		battery_level = uint8_t(gauge.state_of_charge());
     		printf("Gauge initialized ! \n");
     	} else {
@@ -399,10 +419,12 @@ int main()
            BME280::StandbyDuration::MS_1000);
 
     /* BNO055 */
-    if (bno.initialize(BNO055::OperationMode::NDOF, true) != true) {
+    if (bno.initialize(BNO055::OperationMode::CONFIG, true) != true) {
     	pc.printf("ERROR BNO055 not detected. Check your wiring and BNO I2C address\n");
     	return 0;
         }
+
+    bno.set_power_mode(BNO055::PowerMode::SUSPEND);
 
 
     /* ========== Configure tasks ========== */
@@ -412,11 +434,10 @@ int main()
     ble.init(bleInitComplete);
     ble.gap().onConnection(connectionCallback);
 
-    user_button.rise(button_handler);
+    //user_button.rise(button_handler);
     bleQueue.call_every(30000, update_battery_info);
     bleQueue.call_every(2000, watchdog_refresh);
     bleQueue.call_every(5000, update_environmental_data);
-    bleQueue.call_every(20, update_inertial_data);
     bleQueue.dispatch_forever();
     return 0;
 }
