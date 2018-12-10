@@ -1,9 +1,3 @@
-## Modify the node settings
-
-* You can change the name of the node by editting the variable `DEVICE_NAME`
-* you can modify the conection parameters by editting the variable `CONNECTION_INTERVAL_MIN` and `CONNECTION_INTERVAL_MAX`
-* Set the `NEED_LOG` define to 1 if you want more info on the serial link
-
 # 6TRON BLE node
 
 This project is an Mbed OS project using the Mbed Bluetooth API, to create a BLE device that can send environmental end inertial data, using 6TRON boards.
@@ -49,6 +43,7 @@ This demo makes use of the following libraries (automatically imported by `mbed 
 - [Bosch Sensortec BME280](https://gitlab.com/catie_6tron/bosch-sensortec-bme280)
 - [Bosch Sensortec BNO055](https://gitlab.com/catie_6tron/bosch-sensortec-bno055/)
 - [Maxime Integraded Gauge MAX17201](https://gitlab.com/catie_6tron/maxim-integrated-max17201.git)
+- [SPBTLE ST Bluetooth module](https://github.com/ARMmbed/ble-x-nucleo-idb0xa1.git)
 
 ## Usage
 
