@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-#include <events/mbed_events.h>
-#include <mbed.h>
-#include "ble/BLE.h"
+#include "mbed.h"
+#include "BLE.h"
 #include "ble/Gap.h"
 #include "ble/services/UARTService.h"
 #include "ble/services/BatteryService.h"
