@@ -30,6 +30,16 @@
                                   "BLUENRG_PIN_SPI_IRQ=DIO4",
                                   "BLUENRG_PIN_SPI_SCK=SPI1_SCK"]
         },
+        "ZEST_CORE_STM32L4A6ZG": {
+            "target.features_add": ["BLE"],
+            "target.extra_labels_add": ["ST_BLUENRG"],
+            "target.macros_add": ["BLUENRG_PIN_SPI_MOSI=D11",
+                                  "BLUENRG_PIN_SPI_MISO=D12",
+                                  "BLUENRG_PIN_SPI_nCS=SPI1_CS",
+                                  "BLUENRG_PIN_SPI_RESET=DIO2",
+                                  "BLUENRG_PIN_SPI_IRQ=DIO4",
+                                  "BLUENRG_PIN_SPI_SCK=SPI1_SCK"]
+        },
         "Z_MOTION": {
             "target.features_add": ["BLE"],
             "target.extra_labels_add": ["ST_BLUENRG"],
