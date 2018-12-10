@@ -12,11 +12,11 @@ Or you can download the 6TRON application designed for this device:
 
 To share its sensor data, the device use 2 BLE GATT services:
 
-* The Environmental Service which is a standard GATT service (0x181A), with 3 characteristics:
+* The Environmental Service which is a standard GATT service (`0x181A`), with 3 characteristics:
     * Temperature
     * Humidity
     * Pressure
-* The Nordic UART service with is a custom service (0x6E400000B5A3F393E0A9E50E24DCCA9E), with 2 characteristics
+* The Nordic UART service with is a custom service (`0x6E400000B5A3F393E0A9E50E24DCCA9E`), with 2 characteristics
     * RX
     * TX
 
