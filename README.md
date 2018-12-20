@@ -60,9 +60,9 @@ This application depends on the following libraries:
 To clone **and** deploy the project in one command, use `mbed import` and skip to
 the target and toolchain definition:
 
-  ```shell
-  mbed import https://gitlab.com/catie_6tron/z-motion-demo.git z-motion-demo
-  ```
+```shell
+mbed import https://gitlab.com/catie_6tron/z-motion-demo.git z-motion-demo
+```
 
 Alternatively:
 
@@ -91,30 +91,30 @@ Alternatively:
   mbed deploy
   ```
 
-- Define your target (eg. `Z_MOTION`) and toolchain:
+Define your target (eg. `Z_MOTION`) and toolchain:
 
-  ```shell
-  mbed target Z_MOTION
-  mbed toolchain GCC_ARM
-  ```
+```shell
+mbed target Z_MOTION
+mbed toolchain GCC_ARM
+```
 
-- Export to Eclipse IDE with:
+Export to Eclipse IDE with:
 
-  ```shell
-  mbed export -i eclipse_6tron
-  ```
+```shell
+mbed export -i eclipse_6tron
+```
     
 ## Compiling and programming from command line
 
-- Compile the project:
+Compile the project:
 
-  ```shell
-  mbed compile
-  ```
+```shell
+mbed compile
+```
 
-- Program the target device (eg. `STM32L496RG` for the Z_MOTION) with a J-Link debug
-  probe:
+Program the target device (eg. `STM32L496RG` for the Z_MOTION) with a J-Link debug
+probe:
 
-  ```shell
-  python dist/program.py STM32L496RG BUILD/Z_MOTION/GCC_ARM/z-motion-demo.elf
-  ```
+```shell
+python dist/program.py STM32L496RG BUILD/Z_MOTION/GCC_ARM/z-motion-demo.elf
+```
