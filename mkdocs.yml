@@ -1,0 +1,6 @@
+site_name: Z_Motion demo
+
+docs_dir: doc
+
+pages:
+    - Z_Motion demo: index.md
