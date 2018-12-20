@@ -4,7 +4,7 @@ This Mbed OS application sends environmental and inertial data via BLE to a smar
 
 It runs on the completely integrated
 [Z_Motion](https://gitlab.com/catie_6tron/z-motion-hardware/blob/master/doc/index.md) or
-on a stack of 6TRON Zest boards (see [Hardware requirements](#hardware-requirements).
+on a stack of 6TRON Zest boards (see [Hardware requirements](#hardware-requirements)).
 
 Dedicated smartphone applications are available on major platforms:
 
