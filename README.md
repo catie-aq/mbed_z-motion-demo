@@ -1,4 +1,4 @@
-# 6TRON BLE node
+# Z_Motion Demo
 
 This Mbed OS application sends environmental and inertial data via BLE to a smartphone.
 
@@ -61,16 +61,16 @@ To clone **and** deploy the project in one command, use `mbed import` and skip t
 the target and toolchain definition:
 
   ```shell
-  mbed import https://gitlab.com/catie_6tron/6tron-ble-node.git 6tron-ble-node
+  mbed import https://gitlab.com/catie_6tron/z-motion-demo.git z-motion-demo
   ```
 
 Alternatively:
 
-- Clone to `6tron-ble-node` and enter it:
+- Clone to `z-motion-demo` and enter it:
 
   ```shell
-  git clone https://gitlab.com/catie_6tron/6tron-ble-node.git 6tron-ble-node
-  cd 6tron-ble-node
+  git clone https://gitlab.com/catie_6tron/z-motion-demo.git z-motion-demo
+  cd z-motion-demo
   ```
 
 - Create an empty Mbed CLI configuration file:
@@ -104,7 +104,7 @@ Alternatively:
   mbed export -i eclipse_6tron
   ```
     
-## Compiling and programming without IDE
+## Compiling and programming from command line
 
 - Compile the project:
 
@@ -116,5 +116,5 @@ Alternatively:
   probe:
 
   ```shell
-  python dist/program.py STM32L496RG BUILD/Z_MOTION/GCC_ARM/6tron-ble-node.elf
+  python dist/program.py STM32L496RG BUILD/Z_MOTION/GCC_ARM/z-motion-demo.elf
   ```
