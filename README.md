@@ -77,7 +77,7 @@ Alternatively:
 
   - On Linux/macOS:
     ```shell
-    touch .mbed on Linux/macOS
+    touch .mbed
     ```
 
   - Or on Windows:
