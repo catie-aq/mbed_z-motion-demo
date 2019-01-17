@@ -19,14 +19,9 @@ You can deploy this application using 6TRON prototyping boards:
 
 * [The Z_Motion](|catie_6tron/z-motion-hardware|master)
 
-<!-- [restricted=members] -->
-
 ### Software:
 
 * [Z_Motion demo software](https://gitlab.com/catie_6tron/6tron-ble-node)
-
-<!-- [/restricted] -->
-
 
 ### Application 
 
