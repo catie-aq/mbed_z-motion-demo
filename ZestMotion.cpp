@@ -20,7 +20,7 @@
  * ZestMotion.cpp
  *
  *  Created on: 14 avr. 2019
- *      Author: sepro
+ *      Author: Sebastien Prouff
  *      MBED 5.10.4
  */
 
@@ -36,22 +36,22 @@ static SWO swo;
  *
  */
 ZestMotion::ZestMotion(BLE &ble, events::EventQueue &event_queue, MAX17201 &gauge, BME280 &bme, BNO055 &bno) :
-		_ble(ble),
-		_event_queue(event_queue),
-		_led1(LED1),
-		_gap_params(),
+				_ble(ble),
+				_event_queue(event_queue),
+				_led1(LED1),
+				_gap_params(),
 
-		//_i2c(I2C_SDA, I2C_SCL),
-		_gauge(gauge),
-		_battery_level(50),
-		_battery_servicePtr(NULL),
+				//_i2c(I2C_SDA, I2C_SCL),
+				_gauge(gauge),
+				_battery_level(50),
+				_battery_servicePtr(NULL),
 
-		_bme(bme),
-		_env_servicePtr(NULL),
+				_bme(bme),
+				_env_servicePtr(NULL),
 
-		_bno(bno),
-		_stream_config(0),
-		_uart_servicePtr(NULL)
+				_bno(bno),
+				_stream_config(0),
+				_uart_servicePtr(NULL)
 {
 }
 
@@ -63,11 +63,7 @@ ZestMotion::~ZestMotion()
 }
 
 
-/*
- * Méthode publique start
- * Appelé pour initialiser l'objet ZestMotion
- *
- */
+
 void ZestMotion::start() {
 	ble_error_t error;
 	swo.printf("Start\n");
@@ -94,13 +90,7 @@ void ZestMotion::start() {
 }
 
 
-/*
- * Callbak d'initialisation executé lors de l'appel ble.init()
- * Le callback est responsable du paramétrage du GAP
- * Il met en place les callback appelé lors de la connexion et la déconnexion de l'objet
- * Mise en place des GattService
- *
- */
+
 void ZestMotion::on_init_complete(BLE::InitializationCompleteCallbackContext *event)
 {
 	swo.printf("On_init_complete\n");
@@ -131,11 +121,7 @@ void ZestMotion::on_init_complete(BLE::InitializationCompleteCallbackContext *ev
 }
 
 
-/*
- * Méthode start_advertising()
- * reponsable de l'advertising de l'objet avant connexion
- *
- */
+
 void ZestMotion::start_advertising(){
 	uint8_t deviceID[5] = { 0x36, 0x54, 0x52, 0x4F, 0x4E };
 
@@ -163,11 +149,7 @@ void ZestMotion::start_advertising(){
 	_ble.gap().startAdvertising();
 
 }
-/*
- * Callback de connexion
- * Appelé lorsque l'event connection est détecté
- *
- */
+
 void ZestMotion::on_connect(const Gap::ConnectionCallbackParams_t *connection_event)
 {
 	_gap_h = connection_event->handle;
@@ -184,9 +166,6 @@ void ZestMotion::on_connect(const Gap::ConnectionCallbackParams_t *connection_ev
 };
 
 
-/*
- * Useless
- */
 void ZestMotion::updateConnectionParams()
 {
 	if (_ble.gap().getState().connected) {
@@ -202,11 +181,6 @@ void ZestMotion::updateConnectionParams()
 	}
 }
 
-/*
- * Callback de déconnexion.
- * Sert à reprendre l'advertising en attendant une nouvelle connexion.
- *
- */
 
 void ZestMotion::on_disconnect(const Gap::DisconnectionCallbackParams_t *event)
 {
@@ -227,11 +201,6 @@ void ZestMotion::blink(void)
 };
 
 
-/*
- * Méthode update battery value
- * Appelé périodiquement par l'eventQueue, elle envoie les données de batterie lorsque l'objet est connecté
- *
- */
 void ZestMotion::update_battery_value() {
 	//swo.printf("Update sensor info CB !\n");
 	_battery_level = static_cast<uint8_t>(_gauge.state_of_charge());
@@ -263,142 +232,142 @@ void ZestMotion::update_environmental_data()
 
 void ZestMotion::uartDataWrittenCallback(const GattWriteCallbackParams * params)
 {
-    if (params->handle == _uart_servicePtr->getTXCharacteristicHandle()) {
-        swo.printf("TX message: %.*s\n", params->len, params->data);
-        if (params->len == 1) {
-            _stream_config = *params->data;
-        }
-        if (strcmp((const char*) params->data, "DFU") == 0) {
-            swo.printf("Entering DFU mode !\n");
-            mbed_start_application(STM32L496RG_BOOTLOADER_ADDRESS);
-        }
+	if (params->handle == _uart_servicePtr->getTXCharacteristicHandle()) {
+		swo.printf("TX message: %.*s\n", params->len, params->data);
+		if (params->len == 1) {
+			_stream_config = *params->data;
+		}
+		if (strcmp((const char*) params->data, "DFU") == 0) {
+			swo.printf("Entering DFU mode !\n");
+			mbed_start_application(STM32L496RG_BOOTLOADER_ADDRESS);
+		}
 
-    }
+	}
 }
 
 void ZestMotion::update_inertial_data()
 {
-    /* Inertial data are sent through the UART service
-     * By writing on the RX characteristic, the master (Smartphone application for example)
-     * can choose which data are sent through the BLE notifications (0x02 for the 6TRON application)
-     */
+	/* Inertial data are sent through the UART service
+	 * By writing on the RX characteristic, the master (Smartphone application for example)
+	 * can choose which data are sent through the BLE notifications (0x02 for the 6TRON application)
+	 */
 	//swo.printf("update inertial data \n");
-    switch (_stream_config) {
-    case 0x00: // Sensors raw data
-        _accel = _bno.accelerometer();
-        _gyro = _bno.gyroscope();
-        _mag = _bno.magnetometer();
+	switch (_stream_config) {
+	case 0x00: // Sensors raw data
+		_accel = _bno.accelerometer();
+		_gyro = _bno.gyroscope();
+		_mag = _bno.magnetometer();
 
-        _inertial_data[0] = _stream_config; // Stream configuration
-        _inertial_data[1] = (int16_t(_accel.x * 100) & 0xFF);
-        _inertial_data[2] = (int16_t(_accel.x * 100) >> 8) & 0xFF; 	 // accel
-        _inertial_data[3] = (int16_t(_accel.y * 100) & 0xFF);
-        _inertial_data[4] = (int16_t(_accel.y * 100) >> 8) & 0xFF; 	 // accel
-        _inertial_data[5] = (int16_t(_accel.z * 100) & 0xFF);
-        _inertial_data[6] = (int16_t(_accel.z * 100) >> 8) & 0xFF; 	 // accel
+		_inertial_data[0] = _stream_config; // Stream configuration
+		_inertial_data[1] = (int16_t(_accel.x * 100) & 0xFF);
+		_inertial_data[2] = (int16_t(_accel.x * 100) >> 8) & 0xFF; 	 // accel
+		_inertial_data[3] = (int16_t(_accel.y * 100) & 0xFF);
+		_inertial_data[4] = (int16_t(_accel.y * 100) >> 8) & 0xFF; 	 // accel
+		_inertial_data[5] = (int16_t(_accel.z * 100) & 0xFF);
+		_inertial_data[6] = (int16_t(_accel.z * 100) >> 8) & 0xFF; 	 // accel
 
-        _inertial_data[7] = (int16_t(_gyro.x * 100) & 0xFF);
-        _inertial_data[8] = (int16_t(_gyro.x * 100) >> 8) & 0xFF; 	 // _gyro
-        _inertial_data[9] = (int16_t(_gyro.y * 100) & 0xFF);
-        _inertial_data[10] = (int16_t(_gyro.y * 100) >> 8) & 0xFF; 	 // _gyro
-        _inertial_data[11] = (int16_t(_gyro.z * 100) & 0xFF);
-        _inertial_data[12] = (int16_t(_gyro.z * 100) >> 8) & 0xFF; 	 // _gyro
+		_inertial_data[7] = (int16_t(_gyro.x * 100) & 0xFF);
+		_inertial_data[8] = (int16_t(_gyro.x * 100) >> 8) & 0xFF; 	 // _gyro
+		_inertial_data[9] = (int16_t(_gyro.y * 100) & 0xFF);
+		_inertial_data[10] = (int16_t(_gyro.y * 100) >> 8) & 0xFF; 	 // _gyro
+		_inertial_data[11] = (int16_t(_gyro.z * 100) & 0xFF);
+		_inertial_data[12] = (int16_t(_gyro.z * 100) >> 8) & 0xFF; 	 // _gyro
 
-        _inertial_data[13] = (int16_t(_mag.x * 100) & 0xFF);
-        _inertial_data[14] = (int16_t(_mag.x * 100) >> 8) & 0xFF; 		 // _mag
-        _inertial_data[15] = (int16_t(_mag.y * 100) & 0xFF);
-        _inertial_data[16] = (int16_t(_mag.y * 100) >> 8) & 0xFF; 		 // _mag
-        _inertial_data[17] = (int16_t(_mag.z * 100) & 0xFF);
-        _inertial_data[18] = (int16_t(_mag.z * 100) >> 8) & 0xFF; 		 // _mag
+		_inertial_data[13] = (int16_t(_mag.x * 100) & 0xFF);
+		_inertial_data[14] = (int16_t(_mag.x * 100) >> 8) & 0xFF; 		 // _mag
+		_inertial_data[15] = (int16_t(_mag.y * 100) & 0xFF);
+		_inertial_data[16] = (int16_t(_mag.y * 100) >> 8) & 0xFF; 		 // _mag
+		_inertial_data[17] = (int16_t(_mag.z * 100) & 0xFF);
+		_inertial_data[18] = (int16_t(_mag.z * 100) >> 8) & 0xFF; 		 // _mag
 
-        _inertial_data[19] = 0x0A; // "\n"
-        inertial_data_write(_inertial_data, 20);
-        break;
+		_inertial_data[19] = 0x0A; // "\n"
+		inertial_data_write(_inertial_data, 20);
+		break;
 
-    case 0x01: // Orientation (_euler) + Accelerometer
-        _euler = _bno.euler();
-        _accel = _bno.accelerometer();
+	case 0x01: // Orientation (_euler) + Accelerometer
+		_euler = _bno.euler();
+		_accel = _bno.accelerometer();
 
-        _inertial_data[0] = _stream_config; // Stream configuration
-        _inertial_data[1] = (int16_t(_accel.x * 100) & 0xFF);
-        _inertial_data[2] = (int16_t(_accel.x * 100) >> 8) & 0xFF; 	 // accel
-        _inertial_data[3] = (int16_t(_accel.y * 100) & 0xFF);
-        _inertial_data[4] = (int16_t(_accel.y * 100) >> 8) & 0xFF; 	 // accel
-        _inertial_data[5] = (int16_t(_accel.z * 100) & 0xFF);
-        _inertial_data[6] = (int16_t(_accel.z * 100) >> 8) & 0xFF; 	 // accel
+		_inertial_data[0] = _stream_config; // Stream configuration
+		_inertial_data[1] = (int16_t(_accel.x * 100) & 0xFF);
+		_inertial_data[2] = (int16_t(_accel.x * 100) >> 8) & 0xFF; 	 // accel
+		_inertial_data[3] = (int16_t(_accel.y * 100) & 0xFF);
+		_inertial_data[4] = (int16_t(_accel.y * 100) >> 8) & 0xFF; 	 // accel
+		_inertial_data[5] = (int16_t(_accel.z * 100) & 0xFF);
+		_inertial_data[6] = (int16_t(_accel.z * 100) >> 8) & 0xFF; 	 // accel
 
-        _inertial_data[7] = (int16_t(_euler.x * 180 / 3.14 * 100) & 0xFF);
-        _inertial_data[8] = (int16_t(_euler.x * 180 / 3.14 * 1000) >> 8) & 0xFF; // _euler
-        _inertial_data[9] = (int16_t(_euler.y * 180 / 3.14 * 100) & 0xFF);
-        _inertial_data[10] = (int16_t(_euler.y * 180 / 3.14 * 100) >> 8) & 0xFF; // _euler
-        _inertial_data[11] = (int16_t(_euler.z * 180 / 3.14 * 100) & 0xFF);
-        _inertial_data[12] = (int16_t(_euler.z * 180 / 3.14 * 100) >> 8) & 0xFF; // _euler
+		_inertial_data[7] = (int16_t(_euler.x * 180 / 3.14 * 100) & 0xFF);
+		_inertial_data[8] = (int16_t(_euler.x * 180 / 3.14 * 1000) >> 8) & 0xFF; // _euler
+		_inertial_data[9] = (int16_t(_euler.y * 180 / 3.14 * 100) & 0xFF);
+		_inertial_data[10] = (int16_t(_euler.y * 180 / 3.14 * 100) >> 8) & 0xFF; // _euler
+		_inertial_data[11] = (int16_t(_euler.z * 180 / 3.14 * 100) & 0xFF);
+		_inertial_data[12] = (int16_t(_euler.z * 180 / 3.14 * 100) >> 8) & 0xFF; // _euler
 
-        _inertial_data[13] = 0x0A; // "\n"
-        inertial_data_write(_inertial_data, 14);
-        break;
+		_inertial_data[13] = 0x0A; // "\n"
+		inertial_data_write(_inertial_data, 14);
+		break;
 
-    case 0x02:
-        _quat = _bno.raw_quaternion();
-        _accel = _bno.accelerometer();
+	case 0x02:
+		_quat = _bno.raw_quaternion();
+		_accel = _bno.accelerometer();
 
-        _inertial_data[0] = _stream_config; // Stream configuration
-        _inertial_data[1] = (int16_t(_accel.x * 100) & 0xFF);
-        _inertial_data[2] = (int16_t(_accel.x * 100) >> 8) & 0xFF; 	 // _accel
-        _inertial_data[3] = (int16_t(_accel.y * 100) & 0xFF);
-        _inertial_data[4] = (int16_t(_accel.y * 100) >> 8) & 0xFF; 	 // _accel
-        _inertial_data[5] = (int16_t(_accel.z * 100) & 0xFF);
-        _inertial_data[6] = (int16_t(_accel.z * 100) >> 8) & 0xFF; 	 // accel
+		_inertial_data[0] = _stream_config; // Stream configuration
+		_inertial_data[1] = (int16_t(_accel.x * 100) & 0xFF);
+		_inertial_data[2] = (int16_t(_accel.x * 100) >> 8) & 0xFF; 	 // _accel
+		_inertial_data[3] = (int16_t(_accel.y * 100) & 0xFF);
+		_inertial_data[4] = (int16_t(_accel.y * 100) >> 8) & 0xFF; 	 // _accel
+		_inertial_data[5] = (int16_t(_accel.z * 100) & 0xFF);
+		_inertial_data[6] = (int16_t(_accel.z * 100) >> 8) & 0xFF; 	 // accel
 
-        _inertial_data[7] = (int16_t(_quat.w) & 0xFF);
-        _inertial_data[8] = (int16_t(_quat.w) >> 8) & 0xFF; 	 // _quat
-        _inertial_data[9] = (int16_t(_quat.x) & 0xFF);
-        _inertial_data[10] = (int16_t(_quat.x) >> 8) & 0xFF; 	 // _quat
-        _inertial_data[11] = (int16_t(_quat.y) & 0xFF);
-        _inertial_data[12] = (int16_t(_quat.y) >> 8) & 0xFF; 	 // _quat
-        _inertial_data[13] = (int16_t(_quat.z) & 0xFF);
-        _inertial_data[14] = (int16_t(_quat.z) >> 8) & 0xFF; 	 // _quat
+		_inertial_data[7] = (int16_t(_quat.w) & 0xFF);
+		_inertial_data[8] = (int16_t(_quat.w) >> 8) & 0xFF; 	 // _quat
+		_inertial_data[9] = (int16_t(_quat.x) & 0xFF);
+		_inertial_data[10] = (int16_t(_quat.x) >> 8) & 0xFF; 	 // _quat
+		_inertial_data[11] = (int16_t(_quat.y) & 0xFF);
+		_inertial_data[12] = (int16_t(_quat.y) >> 8) & 0xFF; 	 // _quat
+		_inertial_data[13] = (int16_t(_quat.z) & 0xFF);
+		_inertial_data[14] = (int16_t(_quat.z) >> 8) & 0xFF; 	 // _quat
 
-        _inertial_data[15] = 0x0A; // "\n"
-        inertial_data_write(_inertial_data, 16);
-        break;
+		_inertial_data[15] = 0x0A; // "\n"
+		inertial_data_write(_inertial_data, 16);
+		break;
 
-    default:
-        _accel = _bno.accelerometer();
-        _gyro = _bno.gyroscope();
-        _mag = _bno.magnetometer();
+	default:
+		_accel = _bno.accelerometer();
+		_gyro = _bno.gyroscope();
+		_mag = _bno.magnetometer();
 
-        _inertial_data[0] = _stream_config; // Stream configuration
-        _inertial_data[1] = (int16_t(_accel.x * 100) & 0xFF);
-        _inertial_data[2] = (int16_t(_accel.x * 100) >> 8) & 0xFF; 	 // accel
-        _inertial_data[3] = (int16_t(_accel.y * 100) & 0xFF);
-        _inertial_data[4] = (int16_t(_accel.y * 100) >> 8) & 0xFF; 	 // accel
-        _inertial_data[5] = (int16_t(_accel.z * 100) & 0xFF);
-        _inertial_data[6] = (int16_t(_accel.z * 100) >> 8) & 0xFF; 	 // accel
+		_inertial_data[0] = _stream_config; // Stream configuration
+		_inertial_data[1] = (int16_t(_accel.x * 100) & 0xFF);
+		_inertial_data[2] = (int16_t(_accel.x * 100) >> 8) & 0xFF; 	 // accel
+		_inertial_data[3] = (int16_t(_accel.y * 100) & 0xFF);
+		_inertial_data[4] = (int16_t(_accel.y * 100) >> 8) & 0xFF; 	 // accel
+		_inertial_data[5] = (int16_t(_accel.z * 100) & 0xFF);
+		_inertial_data[6] = (int16_t(_accel.z * 100) >> 8) & 0xFF; 	 // accel
 
-        _inertial_data[7] = (int16_t(_gyro.x * 100) & 0xFF);
-        _inertial_data[8] = (int16_t(_gyro.x * 100) >> 8) & 0xFF; 	 // _gyro
-        _inertial_data[9] = (int16_t(_gyro.y * 100) & 0xFF);
-        _inertial_data[10] = (int16_t(_gyro.y * 100) >> 8) & 0xFF; 	 // _gyro
-        _inertial_data[11] = (int16_t(_gyro.z * 100) & 0xFF);
-        _inertial_data[12] = (int16_t(_gyro.z * 100) >> 8) & 0xFF; 	 // _gyro
+		_inertial_data[7] = (int16_t(_gyro.x * 100) & 0xFF);
+		_inertial_data[8] = (int16_t(_gyro.x * 100) >> 8) & 0xFF; 	 // _gyro
+		_inertial_data[9] = (int16_t(_gyro.y * 100) & 0xFF);
+		_inertial_data[10] = (int16_t(_gyro.y * 100) >> 8) & 0xFF; 	 // _gyro
+		_inertial_data[11] = (int16_t(_gyro.z * 100) & 0xFF);
+		_inertial_data[12] = (int16_t(_gyro.z * 100) >> 8) & 0xFF; 	 // _gyro
 
-        _inertial_data[13] = (int16_t(_mag.x * 100) & 0xFF);
-        _inertial_data[14] = (int16_t(_mag.x * 100) >> 8) & 0xFF; 		 // _mag
-        _inertial_data[15] = (int16_t(_mag.y * 100) & 0xFF);
-        _inertial_data[16] = (int16_t(_mag.y * 100) >> 8) & 0xFF; 		 // _mag
-        _inertial_data[17] = (int16_t(_mag.z * 100) & 0xFF);
-        _inertial_data[18] = (int16_t(_mag.z * 100) >> 8) & 0xFF; 		 // _mag
+		_inertial_data[13] = (int16_t(_mag.x * 100) & 0xFF);
+		_inertial_data[14] = (int16_t(_mag.x * 100) >> 8) & 0xFF; 		 // _mag
+		_inertial_data[15] = (int16_t(_mag.y * 100) & 0xFF);
+		_inertial_data[16] = (int16_t(_mag.y * 100) >> 8) & 0xFF; 		 // _mag
+		_inertial_data[17] = (int16_t(_mag.z * 100) & 0xFF);
+		_inertial_data[18] = (int16_t(_mag.z * 100) >> 8) & 0xFF; 		 // _mag
 
-        _inertial_data[19] = 0x0A; // "\n"
-        inertial_data_write(_inertial_data, 20);
-        break;
-    }
+		_inertial_data[19] = 0x0A; // "\n"
+		inertial_data_write(_inertial_data, 20);
+		break;
+	}
 }
 
 void ZestMotion::inertial_data_write(uint8_t data[20], int size) {
 	//swo.printf("inertial data write \n");
-if (_uart_servicePtr)
-	_uart_servicePtr->write(data, size);
+	if (_uart_servicePtr)
+		_uart_servicePtr->write(data, size);
 
 }

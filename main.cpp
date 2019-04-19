@@ -17,10 +17,10 @@
  */
 
 /*
- * main2.cpp
+ * main.cpp
  *
  *  Created on: 14 avr. 2019
- *      Author: sepro
+ *      Author: Sebastien Prouff
  *      MBED 5.10.4
  */
 
@@ -34,27 +34,27 @@ static SWO swo;
 static events::EventQueue event_queue(/* event count */ 16 * EVENTS_EVENT_SIZE);
 
 
-/** Schedule processing of events from the BLE middleware in the event queue. */
+/*! Schedule processing of events from the BLE middleware in the event queue. */
 void schedule_ble_events(BLE::OnEventsToProcessCallbackContext *context) {
 	event_queue.call(Callback<void()>(&context->ble, &BLE::processEvents));
 }
 
 I2C i2c(I2C_SDA, I2C_SCL);
 
-//Gauge de batterie
+/*!Battery gauge */
 MAX17201 	gauge(&i2c);
 static uint8_t battery_level = 50;
 
-//Capteur environnemental
+/*! Environmental sensor */
 BME280 bme(&i2c);
 
-//Acceléromètre
+/*! Inertial Sensor */
 BNO055 bno(&i2c);
 
 
 
-/*
- * Initialisation de la batterie
+/*!
+ * Battery initialization
  */
 void battery_init() {
 	if (gauge.design_capacity() == 750) {
@@ -71,7 +71,7 @@ void battery_init() {
 }
 
 /*
- * Initialisation du capteur d'environnement
+ * Environment sensor initialization
  *
  */
 void environnement_init()	{
@@ -89,7 +89,7 @@ void environnement_init()	{
 }
 
 /*
- * Initialisation du capteur interniel
+ * Inertial sensor initialization
  */
 void inertial_init()	{
 	if (bno.initialize(BNO055::OperationMode::CONFIG, true) != true) {
@@ -102,15 +102,16 @@ void inertial_init()	{
 
 int main()
 {
-	swo.printf("LET's DO IT !\n");
+	swo.printf("Welcome in the ZestMotion class version !\n");
+	/*! Get of instance of the BLE */
 	BLE &ble = BLE::Instance();
 	ble.onEventsToProcess(schedule_ble_events);
 
-	//initialisation des capteurs
+	//sensor init
 	battery_init();
 	environnement_init();
 	inertial_init();
-
+	/*! Instanciate and use a ZestMotion */
 	ZestMotion myMotion(ble, event_queue, gauge, bme, bno);
 	myMotion.start();
 
