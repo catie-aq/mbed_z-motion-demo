@@ -1,4 +1,9 @@
-{
+{   "config": {
+        "ble_device_name": {
+         "help": "Name of the BLE device",
+         "value": "Z_Motion"
+              }
+        },
     "target_overrides": {
         "K64F": {
             "target.features_add": ["BLE"],
@@ -15,9 +20,9 @@
             "target.macros_add": ["IDB0XA1_D13_PATCH",
 				  "BLUENRG_PIN_SPI_MOSI=D11",
                                   "BLUENRG_PIN_SPI_MISO=D12",
-                                  "BLUENRG_PIN_SPI_nCS=SPI1_CS",
-                                  "BLUENRG_PIN_SPI_RESET=DIO2",
-                                  "BLUENRG_PIN_SPI_IRQ=DIO4",
+                                  "BLUENRG_PIN_SPI_nCS=ADC_IN2",
+                                  "BLUENRG_PIN_SPI_RESET=ADC_IN1",
+                                  "BLUENRG_PIN_SPI_IRQ=ADC_IN4",
                                   "BLUENRG_PIN_SPI_SCK=SPI1_SCK"]
         },
         "ZEST_CORE_STM32L4A6RG": {
