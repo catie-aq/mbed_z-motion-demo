@@ -190,7 +190,7 @@ void update_inertial_data()
         inertial_data[6] = (int16_t(accel.z * 100) >> 8) & 0xFF; 	 // accel
 
         inertial_data[7] = (int16_t(euler.x * 180 / 3.14 * 100) & 0xFF);
-        inertial_data[8] = (int16_t(euler.x * 180 / 3.14 * 1000) >> 8) & 0xFF; // euler
+        inertial_data[8] = (int16_t(euler.x * 180 / 3.14 * 100) >> 8) & 0xFF; // euler
         inertial_data[9] = (int16_t(euler.y * 180 / 3.14 * 100) & 0xFF);
         inertial_data[10] = (int16_t(euler.y * 180 / 3.14 * 100) >> 8) & 0xFF; // euler
         inertial_data[11] = (int16_t(euler.z * 180 / 3.14 * 100) & 0xFF);
