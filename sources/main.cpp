@@ -17,7 +17,7 @@
  * limitations under the License.
  */
 
-#include "ZMotion.h"
+#include "z_motion_app.h"
 
 using namespace sixtron;
 static SWO swo;

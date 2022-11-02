@@ -17,7 +17,7 @@
  * limitations under the License.
  */
 
-#include "ZMotion.h"
+#include "z_motion_app.h"
 
 using namespace sixtron;
 static SWO swo;
@@ -256,7 +256,7 @@ void ZMotion::update_inertial_data() {
         _inertial_data[6] = (int16_t(_acceleration.z * 100) >> 8) & 0xFF; 	 // accel
 
         _inertial_data[7] = (int16_t(_euler_angles.x * 180 / 3.14 * 100) & 0xFF);
-        _inertial_data[8] = (int16_t(_euler_angles.x * 180 / 3.14 * 1000) >> 8) & 0xFF; // _euler
+        _inertial_data[8] = (int16_t(_euler_angles.x * 180 / 3.14 * 100) >> 8) & 0xFF; // _euler
         _inertial_data[9] = (int16_t(_euler_angles.y * 180 / 3.14 * 100) & 0xFF);
         _inertial_data[10] = (int16_t(_euler_angles.y * 180 / 3.14 * 100) >> 8) & 0xFF; // _euler
         _inertial_data[11] = (int16_t(_euler_angles.z * 180 / 3.14 * 100) & 0xFF);

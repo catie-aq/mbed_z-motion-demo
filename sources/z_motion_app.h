@@ -49,7 +49,7 @@ const static char DEVICE_NAME[] = "6tronZMC";
  *  This version works with MBED 5.10.4, the legacy API and bluetooth shield driver
  */
 
-class ZMotion: public Gap::EventHandler {
+class ZMotion: public ble::Gap::EventHandler, public ble::GattServer::EventHandler{
 public:
     /*!
      *  ZMotion constructor
