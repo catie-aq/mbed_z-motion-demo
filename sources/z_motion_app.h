@@ -1,7 +1,7 @@
 /*
  * Z_Motion demo
  * Copyright (c) 2019, Sebastien Prouff
- * Copyright (c) 2018, CATIE
+ * Copyright (c) 2022, CATIE
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,18 +20,17 @@
 #ifndef ZMOTION_H_
 #define ZMOTION_H_
 
-#include "events/mbed_events.h"
-#include "mbed.h"
 #include "ble/BLE.h"
 #include "ble/Gap.h"
 #include "ble/services/BatteryService.h"
 #include "ble/services/EnvironmentalService.h"
-#include "ble/services/UARTService.h"
+#include "events/mbed_events.h"
+#include "mbed.h"
 
-#include "swo.h"
-#include "max17201.h"
 #include "bme280.h"
 #include "bno055.h"
+#include "max17201.h"
+#include "swo.h"
 
 namespace {
 #define STM32L496RG_BOOTLOADER_ADDRESS 0x1FFF0000
@@ -40,7 +39,7 @@ namespace {
 using namespace sixtron;
 
 /**\name BLE device name                      */
-const static char DEVICE_NAME[] = "6tronZMC";
+const static char DEVICE_NAME[] = "6tron Z_Motion";
 
 /*!
  *  \class ZMotion
@@ -49,7 +48,7 @@ const static char DEVICE_NAME[] = "6tronZMC";
  *  This version works with MBED 5.10.4, the legacy API and bluetooth shield driver
  */
 
-class ZMotion: public ble::Gap::EventHandler, public ble::GattServer::EventHandler{
+class ZMotion: public ble::Gap::EventHandler, public ble::GattServer::EventHandler {
 public:
     /*!
      *  ZMotion constructor
@@ -59,7 +58,11 @@ public:
      *  \param bme BME280 environmental sensor instance
      *  \param bno BNO055 inertial sensor instance
      */
-    ZMotion(BLE &ble, events::EventQueue &event_queue, MAX17201 *gauge, BME280 *imu_environnment, BNO055 *imu_inertial);
+    ZMotion(BLE &ble,
+            events::EventQueue &event_queue,
+            MAX17201 *gauge,
+            BME280 *imu_environnment,
+            BNO055 *imu_inertial);
 
     /*!
      * Zest Motion destructor
@@ -117,7 +120,7 @@ private:
      * Uart data written CB
      *
      */
-    void uartDataWrittenCallback(const GattWriteCallbackParams * params);
+    virtual void onDataWritten(const GattWriteCallbackParams &params);
 
     /*!
      * send the inertial data to the application if connected
@@ -127,46 +130,52 @@ private:
     /*!
      * Event callback executed on the Event connection detected
      */
-    void on_connect(const Gap::ConnectionCallbackParams_t *connection_event);
+    virtual void onConnectionComplete(const ble::ConnectionCompleteEvent &event);
 
     /*!
      * Event callback executed on the Event Disconnection detected
      */
-    void on_disconnect(const Gap::DisconnectionCallbackParams_t *event);
+    virtual void onDisconnectionComplete(const ble::DisconnectionCompleteEvent &event);
+
+    /*!
+     * Event callback executed on the connection parameters has been updated
+     */
+    virtual void onConnectionParametersUpdateComplete(
+            const ble::ConnectionParametersUpdateCompleteEvent &event);
 
 private:
-    BLE                         &_ble;
-    events::EventQueue          &_event_queue;
-    PwmOut                      _led1;
-    /*! Gap_param connection structure  */
-    Gap::ConnectionParams_t     _gap_params;
-    /*! Handle on the Gap connection for UART */
-    Gap::Handle_t               _gap_h;
+    BLE &_ble;
+    events::EventQueue &_event_queue;
+    PwmOut _led1;
+    /*! Handle on the Gap connection */
+    ble::connection_handle_t _connection_handler;
     /*! Sensors reference*/
-    MAX17201*                    _gauge;
-    BME280*                      _imu_environnment;
-    BNO055*                      _imu_inertial;
+    MAX17201 *_gauge;
+    BME280 *_environnmental_sensor;
+    BNO055 *_imu;
     /*! BLE Gatt services */
-    BatteryService*             _battery_service;
-    UARTService*                _uart_service;
-    EnvironmentalService*       _env_service;
+    BatteryService *_battery_service;
+    ReadOnlyGattCharacteristic<uint8_t[20]> _TXCharacteristic;
+    WriteOnlyGattCharacteristic<uint8_t> _RXCharacteristic;
+    GattService *_sixtron_service;
+    EnvironmentalService *_env_service;
     /*! Battery gauge sensor */
-    uint8_t                     _battery_level;
-    /*! Environment sensor */
-    float                       _temperature;
-    float                       _pressure;
-    float                       _humidity;
+    uint8_t _battery_level;
+    /*! Environmental sensor */
+    float _temperature;
+    float _pressure;
+    float _humidity;
     /*! Inertial sensor*/
-    bno055_raw_quaternion_t     _quaternion;
-    bno055_accelerometer_t      _acceleration;
-    bno055_gyroscope_t          _gyroscope;
-    bno055_magnetometer_t       _magnetometer;
-    bno055_euler_t              _euler_angles;
-    uint8_t                     _inertial_data[20];
-    uint8_t                     _stream_config;
+    bno055_raw_quaternion_t _quaternion;
+    bno055_acceleration_t _acceleration;
+    bno055_angular_velocity_t _gyroscope;
+    bno055_magnetic_field_t _magnetometer;
+    bno055_euler_t _euler_angles;
+    uint8_t _inertial_data[20];
+    uint8_t _stream_config;
     /*! Event_queue id  */
-    int                         _inertial_id;
-    int                         _blink_id;
+    int _inertial_id;
+    int _blink_id;
 };
 
 #endif /* ZMOTION_H_ */

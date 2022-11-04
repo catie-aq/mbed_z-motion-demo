@@ -1,7 +1,7 @@
 /*
  * Z_motion demo
  * Copyright (c) 2019, Sebastien Prouff
- * Copyright (c) 2018, CATIE
+ * Copyright (c) 2022, CATIE
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,10 +23,11 @@ using namespace sixtron;
 static SWO swo;
 
 static events::EventQueue event_queue(16 * EVENTS_EVENT_SIZE);
-Thread z_motion_thread(osPriorityNormal,OS_STACK_SIZE, NULL, "z_motion_thread");
+Thread z_motion_thread(osPriorityNormal, OS_STACK_SIZE, NULL, "z_motion_thread");
 
 /*! Schedule processing of events from the BLE middleware in the event queue. */
-void schedule_ble_events(BLE::OnEventsToProcessCallbackContext *context) {
+void schedule_ble_events(BLE::OnEventsToProcessCallbackContext *context)
+{
     event_queue.call(Callback<void()>(&context->ble, &BLE::processEvents));
 }
 
@@ -36,15 +37,16 @@ I2C i2c(I2C_SDA, I2C_SCL);
 MAX17201 gauge(&i2c);
 
 /*! Environmental sensor */
-BME280 imuEnvironnment(&i2c);
+BME280 environnemental_sensor(&i2c);
 
 /*! Inertial Sensor */
-BNO055 imuInertial(&i2c);
+BNO055 imu(&i2c);
 
 /*!
  * Battery initialization
  */
-int battery_init() {
+int battery_init()
+{
     if (gauge.design_capacity() == 750) {
         if (gauge.configure(1, 160, 3.0, false, false)) {
             swo.printf("Gauge initialized ! \n");
@@ -63,14 +65,13 @@ int battery_init() {
  * Environment sensor initialization
  *
  */
-int environnement_init() {
-    if (!imuEnvironnment.initialize()) {
+int environnement_init()
+{
+    if (!environnemental_sensor.initialize()) {
         swo.printf("Couldn't initialize the BME280...\n");
         return -1;
-    }
-    else {
-
-        imuEnvironnment.set_sampling(BME280::SensorMode::NORMAL,
+    } else {
+        environnemental_sensor.set_sampling(BME280::SensorMode::NORMAL,
                 BME280::SensorSampling::OVERSAMPLING_X1,
                 BME280::SensorSampling::OVERSAMPLING_X1,
                 BME280::SensorSampling::OVERSAMPLING_X1,
@@ -84,38 +85,44 @@ int environnement_init() {
 /*
  * Inertial sensor initialization
  */
-int inertial_init() {
-    if (imuInertial.initialize(BNO055::OperationMode::CONFIG, true) != true) {
+int inertial_init()
+{
+    if (imu.initialize(BNO055::OperationMode::CONFIG, true) != true) {
         swo.printf("ERROR BNO055 not detected. Check your wiring and BNO I2C address\n");
         return -1;
-    }
-    else {
-        imuInertial.set_power_mode(BNO055::PowerMode::SUSPEND);
+    } else {
+        imu.set_power_mode(BNO055::PowerMode::SUSPEND);
         swo.printf("BNO055 initialized ...\n");
         return 0;
     }
 }
 
-int main() {
-    swo.printf("Welcome in the Z_Motion class version !\n");
+int main()
+{
+    swo.printf("Welcome in the Z_Motion demo !\n");
+
     /*! Get of instance of the BLE */
     BLE &ble = BLE::Instance();
-    ZMotion sixTronMotion(ble, event_queue, &gauge, &imuEnvironnment, &imuInertial);
+    ZMotion sixTronMotion(ble, event_queue, &gauge, &environnemental_sensor, &imu);
 
     ble.onEventsToProcess(schedule_ble_events);
 
-    //Sensors initialization
-    if(battery_init()!=0) {
+    // Sensors initialization
+    if (battery_init() != 0) {
         return -1;
     }
-    if(environnement_init()!=0) {
+    if (environnement_init() != 0) {
         return -1;
     }
-    if(inertial_init()!=0) {
+    if (inertial_init() != 0) {
         return -1;
     }
+
     z_motion_thread.start(callback(&sixTronMotion, &ZMotion::start));
-    while(true) {
+
+    while (true) {
+        ThisThread::sleep_for(1s);
     }
+
     return 0;
 }

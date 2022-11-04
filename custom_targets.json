@@ -1,0 +1,27 @@
+{
+    "Z_MOTION": {
+        "bootloader_supported": true,
+        "inherits": [
+            "MCU_STM32L496xG"
+        ],
+        "extra_labels_add": [
+            "STM32L496RG"
+        ],
+        "config": {
+            "usb_speed": {
+                "help": "USE_USB_OTG_FS or USE_USB_OTG_HS or USE_USB_HS_IN_FS",
+                "value": "USE_USB_OTG_FS"
+            }
+        },
+        "overrides": {
+            "clock_source": "USE_PLL_MSI"
+        },
+        "macros_add": [
+            "STM32L496xx"
+        ],
+        "device_has_add": [
+            "USBDEVICE"
+        ],
+        "device_name": "STM32L496RGTx"
+    }
+}
