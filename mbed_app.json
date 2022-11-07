@@ -1,7 +1,7 @@
 {   "config": {
         "ble_device_name": {
          "help": "Name of the BLE device",
-         "value": "Z_Motion"
+         "value": "\"Z_Motion\""
               }
         },
     "target_overrides": {

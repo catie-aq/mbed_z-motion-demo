@@ -167,7 +167,7 @@ void ZMotion::on_init_complete(BLE::InitializationCompleteCallbackContext *event
             ble::adv_interval_t(ble::millisecond_t(500)));
 
     ble::AdvertisingDataBuilder _adv_data_builder(_adv_buffer);
-    _adv_data_builder.setName(DEVICE_NAME);
+    _adv_data_builder.setName(MBED_CONF_APP_BLE_DEVICE_NAME);
     _adv_data_builder.setConnectionIntervalPreference(
             (ble::conn_interval_t)16, (ble::conn_interval_t)16);
     uint8_t deviceID[5] = { 0x36, 0x54, 0x52, 0x4F, 0x4E }; // 6TRON specifific manufacturer data

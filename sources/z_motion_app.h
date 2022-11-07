@@ -25,9 +25,6 @@ namespace {
 
 using namespace sixtron;
 
-/**\name BLE device name                      */
-const static char DEVICE_NAME[] = "6tron Z_Motion";
-
 /*!
  *  \class ZMotion
  *  Handled BLE for ZEstMotion
