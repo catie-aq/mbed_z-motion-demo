@@ -79,15 +79,9 @@ private:
     /*!
      * Initialization Callback executed with ble.init()
      * This callback params the GAP and the callback executed on connection and deconnection events
-     *
+     * and also start advertising
      */
     void on_init_complete(BLE::InitializationCompleteCallbackContext *event);
-
-    /*!
-     * Method in charge of the device advertising capability definition
-     *
-     */
-    void start_advertising();
 
     /*!
      * To blink the led. This callback give information on the connexion
@@ -117,8 +111,7 @@ private:
     void update_inertial_data();
 
     /*!
-     * Uart data written CB
-     *
+     * BLE characteristic data written CB
      */
     virtual void onDataWritten(const GattWriteCallbackParams &params);
 

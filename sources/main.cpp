@@ -103,7 +103,7 @@ int main()
 
     /*! Get of instance of the BLE */
     BLE &ble = BLE::Instance();
-    ZMotion sixTronMotion(ble, event_queue, &gauge, &environnemental_sensor, &imu);
+    ZMotion z_motion_app(ble, event_queue, &gauge, &environnemental_sensor, &imu);
 
     ble.onEventsToProcess(schedule_ble_events);
 
@@ -118,7 +118,7 @@ int main()
         return -1;
     }
 
-    z_motion_thread.start(callback(&sixTronMotion, &ZMotion::start));
+    z_motion_thread.start(callback(&z_motion_app, &ZMotion::start));
 
     while (true) {
         ThisThread::sleep_for(1s);
