@@ -1,64 +1,23 @@
-{
+{   "config": {
+        "ble_device_name": {
+         "help": "Name of the BLE device",
+         "value": "\"Z_Motion\""
+              }
+        },
     "target_overrides": {
-        "K64F": {
-            "target.features_add": ["BLE"],
-            "target.extra_labels_add": ["ST_BLUENRG"],
-            "target.macros_add": ["IDB0XA1_D13_PATCH"]
-        },
-        "NUCLEO_F401RE": {
-            "target.features_add": ["BLE"],
-            "target.extra_labels_add": ["ST_BLUENRG"]
-        },
-        "ZEST_CORE_STM32L496RG": {
-            "target.features_add": ["BLE"],
-            "target.extra_labels_add": ["ST_BLUENRG"],
-            "target.macros_add": ["IDB0XA1_D13_PATCH",
-				  "BLUENRG_PIN_SPI_MOSI=D11",
-                                  "BLUENRG_PIN_SPI_MISO=D12",
-                                  "BLUENRG_PIN_SPI_nCS=SPI1_CS",
-                                  "BLUENRG_PIN_SPI_RESET=DIO2",
-                                  "BLUENRG_PIN_SPI_IRQ=DIO4",
-                                  "BLUENRG_PIN_SPI_SCK=SPI1_SCK"]
-        },
-        "ZEST_CORE_STM32L4A6RG": {
-            "target.features_add": ["BLE"],
-            "target.extra_labels_add": ["ST_BLUENRG"],
-            "target.macros_add": ["BLUENRG_PIN_SPI_MOSI=D11",
-                                  "BLUENRG_PIN_SPI_MISO=D12",
-                                  "BLUENRG_PIN_SPI_nCS=SPI1_CS",
-                                  "BLUENRG_PIN_SPI_RESET=DIO2",
-                                  "BLUENRG_PIN_SPI_IRQ=DIO4",
-                                  "BLUENRG_PIN_SPI_SCK=SPI1_SCK"]
-        },
-        "ZEST_CORE_STM32L496ZG": {
-            "target.features_add": ["BLE"],
-            "target.extra_labels_add": ["ST_BLUENRG"],
-            "target.macros_add": ["BLUENRG_PIN_SPI_MOSI=D11",
-                                  "BLUENRG_PIN_SPI_MISO=D12",
-                                  "BLUENRG_PIN_SPI_nCS=SPI1_CS",
-                                  "BLUENRG_PIN_SPI_RESET=DIO2",
-                                  "BLUENRG_PIN_SPI_IRQ=DIO4",
-                                  "BLUENRG_PIN_SPI_SCK=SPI1_SCK"]
-        },
-        "ZEST_CORE_STM32L4A6ZG": {
-            "target.features_add": ["BLE"],
-            "target.extra_labels_add": ["ST_BLUENRG"],
-            "target.macros_add": ["BLUENRG_PIN_SPI_MOSI=D11",
-                                  "BLUENRG_PIN_SPI_MISO=D12",
-                                  "BLUENRG_PIN_SPI_nCS=SPI1_CS",
-                                  "BLUENRG_PIN_SPI_RESET=DIO2",
-                                  "BLUENRG_PIN_SPI_IRQ=DIO4",
-                                  "BLUENRG_PIN_SPI_SCK=SPI1_SCK"]
+        "*": {
+            "platform.minimal-printf-enable-floating-point": true
         },
         "Z_MOTION": {
             "target.features_add": ["BLE"],
-            "target.extra_labels_add": ["ST_BLUENRG"],
-            "target.macros_add": ["BLUENRG_PIN_SPI_MOSI=SPI_MOSI",
-                                  "BLUENRG_PIN_SPI_MISO=SPI_MISO",
-                                  "BLUENRG_PIN_SPI_nCS=SPI1_CS",
-                                  "BLUENRG_PIN_SPI_RESET=PB_0",
-                                  "BLUENRG_PIN_SPI_IRQ=PC_4",
-                                  "BLUENRG_PIN_SPI_SCK=SPI1_SCK"]
+            "target.components_add": ["BlueNRG_MS"],
+            "target.extra_labels_add": ["CORDIO"],
+            "bluenrg_ms.SPI_MOSI": "SPI_MOSI",
+            "bluenrg_ms.SPI_MISO": "SPI_MISO",
+            "bluenrg_ms.SPI_nCS": "SPI1_CS",
+            "bluenrg_ms.SPI_RESET": "PB_0",
+            "bluenrg_ms.SPI_IRQ": "PC_4",
+            "bluenrg_ms.SPI_SCK": "SPI1_SCK"
         }
     }
 }
