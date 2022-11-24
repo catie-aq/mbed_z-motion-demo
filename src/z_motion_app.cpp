@@ -225,8 +225,8 @@ void ZMotion::updateConnectionParams()
     swo.printf("Request a connection params update!\n");
 
     _ble.gap().updateConnectionParameters(_connection_handler,
-            ble::conn_interval_t(16),
-            ble::conn_interval_t(16),
+            ble::conn_interval_t(6),
+            ble::conn_interval_t(10),
             0,
             ble::supervision_timeout_t(500));
 }

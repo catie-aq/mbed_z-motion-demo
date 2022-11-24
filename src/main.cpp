@@ -34,7 +34,7 @@ BNO055 imu(&i2c);
  */
 int battery_init()
 {
-    if (gauge.design_capacity() == 750) {
+    if (gauge.design_capacity() != 160) {
         if (gauge.configure(1, 160, 3.0, false, false)) {
             swo.printf("Gauge initialized ! \n");
             return 0;
