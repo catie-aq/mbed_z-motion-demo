@@ -50,9 +50,9 @@ The following hardware is required:
 This application depends on the following libraries:
 
 - [Mbed OS](https://gitlab.com/catie_6tron/mbed-os.git)
-- [Bosch Sensortec BME280](https://gitlab.com/catie_6tron/bosch-sensortec-bme280)
-- [Bosch Sensortec BNO055](https://gitlab.com/catie_6tron/bosch-sensortec-bno055/)
-- [Maxime Integraded MAX17201](https://gitlab.com/catie_6tron/maxim-integrated-max17201.git)
+- [Bosch Sensortec BME280](https://github.com/catie-aq/mbed_bosch-sensortec-bme280)
+- [Bosch Sensortec BNO055](https://github.com/catie-aq/mbed_bosch-sensortec-bno055/)
+- [Maxime Integraded MAX17201](https://github.com/catie-aq/mbed_maxim-integrated-max17201)
 - [STMicroelectronics SPBTLE-RF](https://github.com/ARMmbed/ble-x-nucleo-idb0xa1.git)
 
 ## Usage
