@@ -132,8 +132,8 @@ void ZMotion::start()
     }
     /* to show we're running we'll blink every 500ms */
     _blink_id = _event_queue.call_every(500ms, this, &ZMotion::blink);
-    _event_queue.call_every(1s, this, &ZMotion::update_battery_value);
-    _event_queue.call_every(1s, this, &ZMotion::update_environmental_data);
+    _event_queue.call_every(20s, this, &ZMotion::update_battery_value);
+    _event_queue.call_every(10s, this, &ZMotion::update_environmental_data);
     /* this will not return until shutdown */
     _event_queue.dispatch_forever();
 }
@@ -164,9 +164,10 @@ void ZMotion::on_init_complete(BLE::InitializationCompleteCallbackContext *event
 
     /* Create advertising parameters and payload */
     ble::AdvertisingParameters adv_parameters(ble::advertising_type_t::CONNECTABLE_UNDIRECTED,
-            ble::adv_interval_t(ble::millisecond_t(500)));
+            ble::adv_interval_t(ble::millisecond_t(100)));
 
     ble::AdvertisingDataBuilder _adv_data_builder(_adv_buffer);
+    _adv_data_builder.setFlags();
     _adv_data_builder.setName(MBED_CONF_APP_BLE_DEVICE_NAME);
     _adv_data_builder.setConnectionIntervalPreference(
             (ble::conn_interval_t)16, (ble::conn_interval_t)16);
