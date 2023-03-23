@@ -6,8 +6,11 @@
 
 #include "z_motion_app.h"
 
+DigitalOut debug_pin(PB_12, 0);
+
 using namespace sixtron;
 static SWO swo;
+uint64_t timestamp_offset = 0;
 
 uint8_t _adv_buffer[ble::LEGACY_ADVERTISING_MAX_SIZE];
 
@@ -96,7 +99,7 @@ ZMotion::ZMotion(BLE &ble,
         _temperature(0),
         _pressure(0),
         _humidity(0),
-        _stream_config(0),
+        _stream_config(0x10),
         _inertial_id(0),
         _blink_id(0)
 {
@@ -131,7 +134,7 @@ void ZMotion::start()
         return;
     }
     /* to show we're running we'll blink every 500ms */
-    _blink_id = _event_queue.call_every(500ms, this, &ZMotion::blink);
+    _blink_id = _event_queue.call_every(100ms, this, &ZMotion::blink);
     _event_queue.call_every(20s, this, &ZMotion::update_battery_value);
     _event_queue.call_every(10s, this, &ZMotion::update_environmental_data);
     /* this will not return until shutdown */
@@ -191,12 +194,69 @@ void ZMotion::on_init_complete(BLE::InitializationCompleteCallbackContext *event
         return;
     }
 
-    /* Start advertising */
-    error = _ble.gap().startAdvertising(ble::LEGACY_ADVERTISING_HANDLE);
+    scan();
 
+    // /* Start advertising */
+    // error = _ble.gap().startAdvertising(ble::LEGACY_ADVERTISING_HANDLE);
+
+    // if (error) {
+    //     printf("ble.gap().startAdvertising() failed\r\n");
+    //     return;
+    // }
+}
+
+void ZMotion::scan()
+{
+    ble_error_t error = _ble.gap().setScanParameters(
+            ble::ScanParameters(ble::phy_t::LE_1M, // scan on the 1M PHY
+                    ble::scan_interval_t(2000),
+                    ble::scan_window_t(2000),
+                    false));
     if (error) {
-        printf("ble.gap().startAdvertising() failed\r\n");
+        swo.printf("Error caused by Gap::setScanParameters");
         return;
+    }
+
+    /* start scanning and attach a callback that will handle advertisements
+     * and scan requests responses */
+    error = _ble.gap().startScan(ble::scan_duration_t(0));
+    if (error) {
+        swo.printf("Error caused by Gap::startScan");
+        return;
+    }
+}
+
+void ZMotion::onAdvertisingReport(const ble::AdvertisingReportEvent &event)
+{
+    ble::AdvertisingDataParser adv_parser(event.getPayload());
+
+    /* parse the advertising payload */
+    while (adv_parser.hasNext()) {
+        ble::AdvertisingDataParser::element_t field = adv_parser.next();
+
+        if (field.type == ble::adv_data_type_t::MANUFACTURER_SPECIFIC_DATA
+                && field.value.size() == 4) {
+            swo.printf("Manufacturer data len : %d\n", field.value.size());
+            uint8_t sync_id[4] = { 0xFF, 0xFF, 0xAA, 0xAA };
+            if (memcmp(sync_id, field.value.data(), sizeof(sync_id)) == 0) {
+                timestamp_offset = Kernel::get_ms_count();
+                debug_pin = 1;
+                swo.printf("Synchronised !\n");
+
+                _ble.gap().stopScan();
+
+                /* Start advertising */
+                _event_queue.cancel(_blink_id);
+                _blink_id = _event_queue.call_every(500ms, this, &ZMotion::blink);
+                _ble.gap().startAdvertising(ble::LEGACY_ADVERTISING_HANDLE);
+            };
+            ble::address_t address = event.getPeerAddress();
+            for (int i = 0; i < sizeof(address); i++) {
+                swo.printf("%02x:", address[i]);
+            }
+            swo.printf("\n");
+            swo.printf("RSSI: %d\n", event.getRssi());
+        }
     }
 }
 
@@ -216,7 +276,7 @@ void ZMotion::onConnectionComplete(const ble::ConnectionCompleteEvent &event)
     _imu->set_power_mode(BNO055::PowerMode::NORMAL);
     ThisThread::sleep_for(800ms);
     _imu->set_operation_mode(BNO055::OperationMode::NDOF);
-    _inertial_id = _event_queue.call_every(20ms, this, &ZMotion::update_inertial_data);
+    _inertial_id = _event_queue.call_every(10ms, this, &ZMotion::update_inertial_data);
 
     updateConnectionParams();
 }
@@ -227,7 +287,7 @@ void ZMotion::updateConnectionParams()
 
     _ble.gap().updateConnectionParameters(_connection_handler,
             ble::conn_interval_t(6),
-            ble::conn_interval_t(10),
+            ble::conn_interval_t(8),
             0,
             ble::supervision_timeout_t(500));
 }
@@ -248,11 +308,12 @@ void ZMotion::onConnectionParametersUpdateComplete(
 
 void ZMotion::onDisconnectionComplete(const ble::DisconnectionCompleteEvent &event)
 {
+    debug_pin = 0;
     swo.printf("Disconnected in \r\n");
     _event_queue.cancel(_inertial_id);
     _imu->set_operation_mode(BNO055::OperationMode::CONFIG);
     _imu->set_power_mode(BNO055::PowerMode::SUSPEND);
-    _blink_id = _event_queue.call_every(200, this, &ZMotion::blink);
+    _blink_id = _event_queue.call_every(500ms, this, &ZMotion::blink);
     _ble.gap().startAdvertising(ble::LEGACY_ADVERTISING_HANDLE);
 };
 
@@ -303,6 +364,9 @@ void ZMotion::update_inertial_data()
      * By writing on the RX characteristic, the master (Smartphone application for example)
      * can choose which data are sent through the BLE notifications (0x02 for the 6TRON application)
      */
+    uint32_t timestamp;
+    static bool packet_full = false;
+
     switch (_stream_config) {
         case 0x00: // Sensors raw data
             _acceleration = _imu->acceleration();
@@ -384,45 +448,77 @@ void ZMotion::update_inertial_data()
             _inertial_data[15] = 0x0A; // "\n"
             inertial_data_write(_inertial_data, 16);
             break;
-
-        default:
+        case 0x03:
+            // uint64_t timestamp = Kernel::Clock::now().time_since_epoch().count();
+            timestamp = Kernel::get_ms_count() - timestamp_offset;
             _acceleration = _imu->acceleration();
-            _gyroscope = _imu->angular_velocity();
-            _magnetometer = _imu->magnetic_field();
 
-            _inertial_data[0] = _stream_config; // Stream configuration
-            _inertial_data[1] = (int16_t(_acceleration.x * 100) & 0xFF);
-            _inertial_data[2] = (int16_t(_acceleration.x * 100) >> 8) & 0xFF; // accel
-            _inertial_data[3] = (int16_t(_acceleration.y * 100) & 0xFF);
-            _inertial_data[4] = (int16_t(_acceleration.y * 100) >> 8) & 0xFF; // accel
-            _inertial_data[5] = (int16_t(_acceleration.z * 100) & 0xFF);
-            _inertial_data[6] = (int16_t(_acceleration.z * 100) >> 8) & 0xFF; // accel
+            if (!packet_full) {
+                packet_full = true;
+                _inertial_data[0] = (timestamp)&0xFF;
+                _inertial_data[1] = (timestamp >> 8) & 0xFF;
+                _inertial_data[2] = (timestamp >> 16) & 0xFF;
+                _inertial_data[3] = (timestamp >> 24) & 0xFF;
+                _inertial_data[4] = (int16_t(_acceleration.x * 100) & 0xFF);
+                _inertial_data[5] = (int16_t(_acceleration.x * 100) >> 8) & 0xFF; // _accel
+                _inertial_data[6] = (int16_t(_acceleration.y * 100) & 0xFF);
+                _inertial_data[7] = (int16_t(_acceleration.y * 100) >> 8) & 0xFF; // _accel
+                _inertial_data[8] = (int16_t(_acceleration.z * 100) & 0xFF);
+                _inertial_data[9] = (int16_t(_acceleration.z * 100) >> 8) & 0xFF; // accel
+            } else {
+                packet_full = false;
+                _inertial_data[10] = (timestamp)&0xFF;
+                _inertial_data[11] = (timestamp >> 8) & 0xFF;
+                _inertial_data[12] = (timestamp >> 16) & 0xFF;
+                _inertial_data[13] = (timestamp >> 24) & 0xFF;
+                _inertial_data[14] = (int16_t(_acceleration.x * 100) & 0xFF);
+                _inertial_data[15] = (int16_t(_acceleration.x * 100) >> 8) & 0xFF; // _accel
+                _inertial_data[16] = (int16_t(_acceleration.y * 100) & 0xFF);
+                _inertial_data[17] = (int16_t(_acceleration.y * 100) >> 8) & 0xFF; // _accel
+                _inertial_data[18] = (int16_t(_acceleration.z * 100) & 0xFF);
+                _inertial_data[19] = (int16_t(_acceleration.z * 100) >> 8) & 0xFF; // accel
 
-            _inertial_data[7] = (int16_t(_gyroscope.x * 100) & 0xFF);
-            _inertial_data[8] = (int16_t(_gyroscope.x * 100) >> 8) & 0xFF; // _gyro
-            _inertial_data[9] = (int16_t(_gyroscope.y * 100) & 0xFF);
-            _inertial_data[10] = (int16_t(_gyroscope.y * 100) >> 8) & 0xFF; // _gyro
-            _inertial_data[11] = (int16_t(_gyroscope.z * 100) & 0xFF);
-            _inertial_data[12] = (int16_t(_gyroscope.z * 100) >> 8) & 0xFF; // _gyro
+                inertial_data_write(_inertial_data, 20);
+            }
+            break;
+        default:
+            // _acceleration = _imu->acceleration();
+            // _gyroscope = _imu->angular_velocity();
+            // _magnetometer = _imu->magnetic_field();
 
-            _inertial_data[13] = (int16_t(_magnetometer.x * 100) & 0xFF);
-            _inertial_data[14] = (int16_t(_magnetometer.x * 100) >> 8) & 0xFF; // _mag
-            _inertial_data[15] = (int16_t(_magnetometer.y * 100) & 0xFF);
-            _inertial_data[16] = (int16_t(_magnetometer.y * 100) >> 8) & 0xFF; // _mag
-            _inertial_data[17] = (int16_t(_magnetometer.z * 100) & 0xFF);
-            _inertial_data[18] = (int16_t(_magnetometer.z * 100) >> 8) & 0xFF; // _mag
+            // _inertial_data[0] = _stream_config; // Stream configuration
+            // _inertial_data[1] = (int16_t(_acceleration.x * 100) & 0xFF);
+            // _inertial_data[2] = (int16_t(_acceleration.x * 100) >> 8) & 0xFF; // accel
+            // _inertial_data[3] = (int16_t(_acceleration.y * 100) & 0xFF);
+            // _inertial_data[4] = (int16_t(_acceleration.y * 100) >> 8) & 0xFF; // accel
+            // _inertial_data[5] = (int16_t(_acceleration.z * 100) & 0xFF);
+            // _inertial_data[6] = (int16_t(_acceleration.z * 100) >> 8) & 0xFF; // accel
 
-            _inertial_data[19] = 0x0A; // "\n"
-            inertial_data_write(_inertial_data, 20);
+            // _inertial_data[7] = (int16_t(_gyroscope.x * 100) & 0xFF);
+            // _inertial_data[8] = (int16_t(_gyroscope.x * 100) >> 8) & 0xFF; // _gyro
+            // _inertial_data[9] = (int16_t(_gyroscope.y * 100) & 0xFF);
+            // _inertial_data[10] = (int16_t(_gyroscope.y * 100) >> 8) & 0xFF; // _gyro
+            // _inertial_data[11] = (int16_t(_gyroscope.z * 100) & 0xFF);
+            // _inertial_data[12] = (int16_t(_gyroscope.z * 100) >> 8) & 0xFF; // _gyro
+
+            // _inertial_data[13] = (int16_t(_magnetometer.x * 100) & 0xFF);
+            // _inertial_data[14] = (int16_t(_magnetometer.x * 100) >> 8) & 0xFF; // _mag
+            // _inertial_data[15] = (int16_t(_magnetometer.y * 100) & 0xFF);
+            // _inertial_data[16] = (int16_t(_magnetometer.y * 100) >> 8) & 0xFF; // _mag
+            // _inertial_data[17] = (int16_t(_magnetometer.z * 100) & 0xFF);
+            // _inertial_data[18] = (int16_t(_magnetometer.z * 100) >> 8) & 0xFF; // _mag
+
+            // _inertial_data[19] = 0x0A; // "\n"
+            // inertial_data_write(_inertial_data, 20);
             break;
     }
 }
 
-void ZMotion::inertial_data_write(uint8_t data[20], int size)
+void ZMotion::inertial_data_write(uint8_t *data, int size)
 {
     ble_error_t error = _ble.gattServer().write(_TXCharacteristic.getValueHandle(), data, size);
 
     if (error) {
-        swo.printf("Update error !\n");
+        swo.printf("Update error %d!\n", error);
     }
 }

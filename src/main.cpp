@@ -10,12 +10,13 @@ using namespace sixtron;
 static SWO swo;
 
 static events::EventQueue event_queue(16 * EVENTS_EVENT_SIZE);
-Thread z_motion_thread(osPriorityNormal, OS_STACK_SIZE, NULL, "z_motion_thread");
+static events::EventQueue ble_queue(16 * EVENTS_EVENT_SIZE);
+Thread z_motion_thread(osPriorityBelowNormal, OS_STACK_SIZE, NULL, "z_motion_thread");
 
 /*! Schedule processing of events from the BLE middleware in the event queue. */
 void schedule_ble_events(BLE::OnEventsToProcessCallbackContext *context)
 {
-    event_queue.call(Callback<void()>(&context->ble, &BLE::processEvents));
+    ble_queue.call(Callback<void()>(&context->ble, &BLE::processEvents));
 }
 
 I2C i2c(I2C_SDA, I2C_SCL);
@@ -88,6 +89,8 @@ int main()
 {
     swo.printf("Welcome in the Z_Motion demo !\n");
 
+    Kernel::get_ms_count();
+
     /*! Get of instance of the BLE */
     BLE &ble = BLE::Instance();
     ZMotion z_motion_app(ble, event_queue, &gauge, &environnemental_sensor, &imu);
@@ -106,6 +109,8 @@ int main()
     }
 
     z_motion_thread.start(callback(&z_motion_app, &ZMotion::start));
+
+    ble_queue.dispatch_forever();
 
     while (true) {
         ThisThread::sleep_for(1s);

@@ -120,6 +120,11 @@ private:
     virtual void onConnectionParametersUpdateComplete(
             const ble::ConnectionParametersUpdateCompleteEvent &event);
 
+
+    void scan();
+
+    void onAdvertisingReport(const ble::AdvertisingReportEvent &event);
+
 private:
     BLE &_ble;
     events::EventQueue &_event_queue;
@@ -148,7 +153,7 @@ private:
     bno055_angular_velocity_t _gyroscope;
     bno055_magnetic_field_t _magnetometer;
     bno055_euler_t _euler_angles;
-    uint8_t _inertial_data[20];
+    uint8_t _inertial_data[40];
     uint8_t _stream_config;
     /*! Event_queue id  */
     int _inertial_id;
