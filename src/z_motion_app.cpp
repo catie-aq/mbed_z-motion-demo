@@ -271,7 +271,7 @@ void ZMotion::onConnectionComplete(const ble::ConnectionCompleteEvent &event)
     _connection_handler = event.getConnectionHandle();
 
     _event_queue.cancel(_blink_id);
-    _led1 = 1;
+    _led1 = 0;
 
     _imu->set_power_mode(BNO055::PowerMode::NORMAL);
     ThisThread::sleep_for(800ms);
@@ -366,6 +366,7 @@ void ZMotion::update_inertial_data()
      */
     uint32_t timestamp;
     static bool packet_full = false;
+    bno055_linear_acceleration_t linear_acceleration;
 
     switch (_stream_config) {
         case 0x00: // Sensors raw data
@@ -451,7 +452,7 @@ void ZMotion::update_inertial_data()
         case 0x03:
             // uint64_t timestamp = Kernel::Clock::now().time_since_epoch().count();
             timestamp = Kernel::get_ms_count() - timestamp_offset;
-            _acceleration = _imu->acceleration();
+            linear_acceleration = _imu->linear_acceleration();
 
             if (!packet_full) {
                 packet_full = true;
@@ -459,24 +460,24 @@ void ZMotion::update_inertial_data()
                 _inertial_data[1] = (timestamp >> 8) & 0xFF;
                 _inertial_data[2] = (timestamp >> 16) & 0xFF;
                 _inertial_data[3] = (timestamp >> 24) & 0xFF;
-                _inertial_data[4] = (int16_t(_acceleration.x * 100) & 0xFF);
-                _inertial_data[5] = (int16_t(_acceleration.x * 100) >> 8) & 0xFF; // _accel
-                _inertial_data[6] = (int16_t(_acceleration.y * 100) & 0xFF);
-                _inertial_data[7] = (int16_t(_acceleration.y * 100) >> 8) & 0xFF; // _accel
-                _inertial_data[8] = (int16_t(_acceleration.z * 100) & 0xFF);
-                _inertial_data[9] = (int16_t(_acceleration.z * 100) >> 8) & 0xFF; // accel
+                _inertial_data[4] = (int16_t(linear_acceleration.x * 100) & 0xFF);
+                _inertial_data[5] = (int16_t(linear_acceleration.x * 100) >> 8) & 0xFF; // _accel
+                _inertial_data[6] = (int16_t(linear_acceleration.y * 100) & 0xFF);
+                _inertial_data[7] = (int16_t(linear_acceleration.y * 100) >> 8) & 0xFF; // _accel
+                _inertial_data[8] = (int16_t(linear_acceleration.z * 100) & 0xFF);
+                _inertial_data[9] = (int16_t(linear_acceleration.z * 100) >> 8) & 0xFF; // accel
             } else {
                 packet_full = false;
                 _inertial_data[10] = (timestamp)&0xFF;
                 _inertial_data[11] = (timestamp >> 8) & 0xFF;
                 _inertial_data[12] = (timestamp >> 16) & 0xFF;
                 _inertial_data[13] = (timestamp >> 24) & 0xFF;
-                _inertial_data[14] = (int16_t(_acceleration.x * 100) & 0xFF);
-                _inertial_data[15] = (int16_t(_acceleration.x * 100) >> 8) & 0xFF; // _accel
-                _inertial_data[16] = (int16_t(_acceleration.y * 100) & 0xFF);
-                _inertial_data[17] = (int16_t(_acceleration.y * 100) >> 8) & 0xFF; // _accel
-                _inertial_data[18] = (int16_t(_acceleration.z * 100) & 0xFF);
-                _inertial_data[19] = (int16_t(_acceleration.z * 100) >> 8) & 0xFF; // accel
+                _inertial_data[14] = (int16_t(linear_acceleration.x * 100) & 0xFF);
+                _inertial_data[15] = (int16_t(linear_acceleration.x * 100) >> 8) & 0xFF; // _accel
+                _inertial_data[16] = (int16_t(linear_acceleration.y * 100) & 0xFF);
+                _inertial_data[17] = (int16_t(linear_acceleration.y * 100) >> 8) & 0xFF; // _accel
+                _inertial_data[18] = (int16_t(linear_acceleration.z * 100) & 0xFF);
+                _inertial_data[19] = (int16_t(linear_acceleration.z * 100) >> 8) & 0xFF; // accel
 
                 inertial_data_write(_inertial_data, 20);
             }
