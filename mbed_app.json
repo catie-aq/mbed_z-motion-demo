@@ -1,17 +1,28 @@
-{   "config": {
+{
+    "config": {
         "ble_device_name": {
-         "help": "Name of the BLE device",
-         "value": "\"Z_Motion\""
-              }
+            "help": "Name of the BLE device",
+            "value": "\"6TRON Node\""
         },
+        "led_intensity": {
+            "help": "Intensity of the LED",
+            "value": "0.5"
+        }
+    },
     "target_overrides": {
         "*": {
             "platform.minimal-printf-enable-floating-point": true
         },
         "Z_MOTION": {
-            "target.features_add": ["BLE"],
-            "target.components_add": ["BlueNRG_MS"],
-            "target.extra_labels_add": ["CORDIO"],
+            "target.features_add": [
+                "BLE"
+            ],
+            "target.components_add": [
+                "BlueNRG_MS"
+            ],
+            "target.extra_labels_add": [
+                "CORDIO"
+            ],
             "bluenrg_ms.SPI_MOSI": "SPI_MOSI",
             "bluenrg_ms.SPI_MISO": "SPI_MISO",
             "bluenrg_ms.SPI_nCS": "SPI1_CS",

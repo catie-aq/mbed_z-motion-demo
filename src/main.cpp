@@ -18,7 +18,7 @@ void schedule_ble_events(BLE::OnEventsToProcessCallbackContext *context)
     event_queue.call(Callback<void()>(&context->ble, &BLE::processEvents));
 }
 
-I2C i2c(I2C_SDA, I2C_SCL);
+I2C i2c(I2C1_SDA, I2C1_SCL);
 
 /*!Battery gauge */
 MAX17201 gauge(&i2c);
