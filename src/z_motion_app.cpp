@@ -211,7 +211,7 @@ void ZMotion::onConnectionComplete(const ble::ConnectionCompleteEvent &event)
     _connection_handler = event.getConnectionHandle();
 
     _event_queue.cancel(_blink_id);
-    _led1 = 1;
+    _led1 = MBED_CONF_APP_LED_INTENSITY;
 
     _imu->set_power_mode(BNO055::PowerMode::NORMAL);
     ThisThread::sleep_for(800ms);
@@ -258,7 +258,11 @@ void ZMotion::onDisconnectionComplete(const ble::DisconnectionCompleteEvent &eve
 
 void ZMotion::blink(void)
 {
-    _led1 = !_led1;
+    if (_led1 == 0.0f) {
+        _led1 = MBED_CONF_APP_LED_INTENSITY;
+    } else {
+        _led1 = 0.0f;
+    }
 }
 
 void ZMotion::update_battery_value()

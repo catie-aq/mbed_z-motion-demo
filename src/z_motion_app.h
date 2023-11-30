@@ -34,13 +34,15 @@ using namespace sixtron;
 
 class ZMotion: public ble::Gap::EventHandler, public ble::GattServer::EventHandler {
 public:
-    /*!
-     *  ZMotion constructor
-     *  \param ble BLE instance
-     *  \param event_queue event_queue instance
-     *  \param gauge MAX17201 gauge instance
-     *  \param bme BME280 environmental sensor instance
-     *  \param bno BNO055 inertial sensor instance
+
+    /**
+     * @brief Constructor for the ZMotion class.
+     * 
+     * @param ble BLE object used for BLE communication.
+     * @param event_queue EventQueue object used for scheduling events.
+     * @param gauge Pointer to the MAX17201 object used for battery monitoring.
+     * @param imu_environnment Pointer to the BME280 object used for environmental sensing.
+     * @param imu_inertial Pointer to the BNO055 object used for inertial sensing.
      */
     ZMotion(BLE &ble,
             events::EventQueue &event_queue,
