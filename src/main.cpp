@@ -5,7 +5,6 @@
  */
 
 #include "z_motion_app.h"
-// #include "iostream"
 
 using namespace sixtron;
 static SWO swo;
