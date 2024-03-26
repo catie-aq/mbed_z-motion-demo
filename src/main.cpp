@@ -86,7 +86,7 @@ int inertial_init()
 
 int main()
 {
-    swo.printf("Welcome in the Z_Motion demo !\n");
+    swo.printf("Welcome to the Z_Motion demo !\n");
 
     /*! Get of instance of the BLE */
     BLE &ble = BLE::Instance();
@@ -96,9 +96,11 @@ int main()
 
     // Sensors initialization
     if (battery_init() != 0) {
+        swo.printf("Couldn't initialize MAX17201 gauge ! \n");
         return -1;
     }
     if (environnement_init() != 0) {
+        swo.printf("Couldn't initialize the BME280...\n");
         return -1;
     }
     if (inertial_init() != 0) {
