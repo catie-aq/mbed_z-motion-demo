@@ -152,6 +152,7 @@ void ZMotion::on_init_complete(BLE::InitializationCompleteCallbackContext *event
 
     /* Setup GATT services */
     _battery_service = new BatteryService(event->ble, _battery_level);
+    update_battery_value();
     _env_service = new EnvironmentalService(event->ble);
     GattCharacteristic *charTable[] = {
         &_TXCharacteristic,
