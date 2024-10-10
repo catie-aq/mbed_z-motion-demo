@@ -99,7 +99,7 @@ ZMotion::ZMotion(BLE &ble,
         _temperature(0),
         _pressure(0),
         _humidity(0),
-        _stream_config(0x10),
+        _stream_config(0x03),
         _inertial_id(0),
         _blink_id(0)
 {
